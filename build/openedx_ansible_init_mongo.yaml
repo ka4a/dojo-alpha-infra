@@ -1,0 +1,87 @@
+---
+
+#
+# adopted from /edx/app/edx_ansible/edx_ansible/playbooks/roles/mongo_4_2/tasks/main.yml
+#
+ 
+- name: add the mongodb signing key
+  apt_key:
+    url: "https://www.mongodb.org/static/pgp/server-{{ MONGO_VERSION_MAJOR_MINOR }}.asc"
+    state: present
+  retries: 3
+
+- name: add the mongodb repo to the sources list
+  apt_repository:
+    repo: "{{ MONGODB_REPO }}"
+    state: present
+
+- name: add the mongodb repo to the sources list
+  apt_repository:
+    repo: "{{ MONGODB_REPO_BIONIC }}"
+    state: present
+  when: ansible_distribution_release == 'focal'
+
+- name: install mongodb-org-shell and mongodb-org-tools
+  apt:
+    pkg:
+      - "mongodb-org-shell={{ MONGO_VERSION }}"
+      - "mongodb-org-tools={{ MONGO_VERSION }}"
+    state: present
+    install_recommends: yes
+    force: yes
+    update_cache: yes
+
+- name: create a mongodb edxapp user
+  shell: |
+    mongo -u {{ MONGO_ADMIN_USER }} -p {{ MONGO_ADMIN_PASSWORD }} --host {{ MONGO_REPL_SET }}/{{ EDXAPP_MONGO_HOSTS }} --authenticationDatabase admin admin --eval "
+      if(db.getUser('{{ EDXAPP_MONGO_USER }}') == null) {
+        db.createUser(
+          {
+            user: '{{ EDXAPP_MONGO_USER }}',
+            pwd: '{{ EDXAPP_MONGO_PASSWORD }}',
+            roles: [
+              { role: 'readWrite', db: '{{ EDXAPP_MONGO_DB_NAME }}' },
+              { role: 'readWrite', db: 'xlog' }
+            ],
+            passwordDigestor:'server'
+          }
+        );
+      } else {
+        db.updateUser('{{ EDXAPP_MONGO_USER }}',
+          {
+            pwd: '{{ EDXAPP_MONGO_PASSWORD }}',
+            roles: [
+              { role: 'readWrite', db: '{{ EDXAPP_MONGO_DB_NAME }}' },
+              { role: 'readWrite', db: 'xlog' }
+            ],
+            passwordDigestor:'server'
+          }
+        );
+      }"
+
+- name: create a mongodb cs_comment_service user
+  shell: |
+    mongo -u {{ MONGO_ADMIN_USER }} -p {{ MONGO_ADMIN_PASSWORD }} --host {{ MONGO_REPL_SET }}/{{ EDXAPP_MONGO_HOSTS }} --authenticationDatabase admin admin --eval "
+      if(db.getUser('{{ FORUM_MONGO_USER }}') == null) {
+        db.createUser(
+          {
+            user: '{{ FORUM_MONGO_USER }}',
+            pwd: '{{ FORUM_MONGO_PASSWORD }}',
+            roles: [
+              { role: 'readWrite', db: '{{ MONGO_CS_COMMENTS_SERVICE_DB_NAME }}' }
+            ],
+            passwordDigestor:'server'
+          }
+        );
+      } else {
+        db.updateUser('{{ FORUM_MONGO_USER }}',
+          {
+            pwd: '{{ FORUM_MONGO_PASSWORD }}',
+            roles: [
+              { role: 'readWrite', db: '{{ MONGO_CS_COMMENTS_SERVICE_DB_NAME }}' }
+            ],
+            passwordDigestor:'server'
+          }
+        );
+      }"
+  when: FORUM_ENABLED

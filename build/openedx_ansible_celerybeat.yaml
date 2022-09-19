@@ -1,0 +1,43 @@
+---
+- name: write supervisor configs
+  template:
+    src: "openedx_ansible_celerybeat_supervisor_conf.j2"
+    dest: "{{ supervisor_available_dir }}/celerybeat.conf"
+    mode: 0650
+    owner: "{{ supervisor_user }}"
+    group: "{{ common_web_user }}"
+  register: openedx_ansible_celerybeat_supervisor_conf
+  tags:
+    - manage
+    - manage:start
+    - install
+    - install:configuration
+
+- name: enable supervisor script
+  file:
+    src: "{{ supervisor_available_dir }}/celerybeat.conf"
+    dest: "{{ supervisor_cfg_dir }}/celerybeat.conf"
+    state: link
+    force: yes
+  tags:
+    - install
+    - install:configuration
+
+- name: update supervisor configuration
+  shell: "{{ supervisor_ctl }} -c {{ supervisor_cfg }} update"
+  when: openedx_ansible_celerybeat_supervisor_conf is changed
+  tags:
+    - manage
+    - manage:start
+
+- name: restart the application
+  supervisorctl:
+    state: restarted
+    supervisorctl_path: "{{ supervisor_ctl }}"
+    config: "{{ supervisor_cfg }}"
+    name: "celerybeat"
+  become_user: "{{ supervisor_service_user }}"
+  when: openedx_ansible_celerybeat_supervisor_conf is changed
+  tags:
+    - manage
+    - manage:start

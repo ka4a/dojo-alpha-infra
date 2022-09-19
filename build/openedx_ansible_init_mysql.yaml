@@ -1,0 +1,211 @@
+---
+
+#
+# adopted from /edx/app/edx_ansible/edx_ansible/playbooks/roles/edxlocal/tasks/main.yml
+#
+
+- name: set facts
+  set_fact:
+    edxlocal_mysql_host: "{{ EDXAPP_MYSQL_HOST }}"
+    edxlocal_host: '%'
+    edxlocal_extra_databases: []
+    edxlocal_databases:
+      - "{{ ECOMMERCE_DATABASE_NAME | default(None) }}"
+      - "{{ INSIGHTS_DATABASE_NAME | default(None) }}"
+      - "{{ XQUEUE_MYSQL_DB_NAME | default(None) }}"
+      - "{{ EDXAPP_MYSQL_DB_NAME | default(None) }}"
+      - "{{ EDXAPP_MYSQL_CSMH_DB_NAME | default(None) }}"
+      - "{{ EDX_NOTES_API_MYSQL_DB_NAME | default(None) }}"
+      - "{{ ANALYTICS_API_DEFAULT_DB_NAME | default(None) }}"
+      - "{{ ANALYTICS_API_REPORTS_DB_NAME | default(None) }}"
+      - "{{ BLOCKSTORE_DEFAULT_DB_NAME | default(None) }}"
+      - "{{ CREDENTIALS_DEFAULT_DB_NAME | default(None) }}"
+      - "{{ DISCOVERY_DEFAULT_DB_NAME | default(None) }}"
+      - "{{ VEDA_WEB_FRONTEND_DEFAULT_DB_NAME | default(None) }}"
+      - "{{ REGISTRAR_DEFAULT_DB_NAME | default(None) }}"
+      - "{{ NOTIFIER_DATABASE_NAME | default(None) }}"
+      - "{{ GAMMA_DB_NAME | default(None) }}"
+      - "{{ ENTERPRISE_CATALOG_DEFAULT_DB_NAME | default(None)}}"
+      - "{{ LICENSE_MANAGER_DEFAULT_DB_NAME | default(None)}}"
+      - "{{ MUX_LTI_PRODUCER_DEFAULT_DB_NAME | default(None)}}"
+    edxlocal_extra_database_users: []
+    edxlocal_database_users:
+      - {
+          db: "{{ ECOMMERCE_DATABASE_NAME | default(None) }}",
+          user: "{{ ECOMMERCE_DATABASE_USER | default(None) }}",
+          pass: "{{ ECOMMERCE_DATABASE_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ INSIGHTS_DATABASE_NAME | default(None) }}",
+          user: "{{ INSIGHTS_DATABASE_USER | default(None) }}",
+          pass: "{{ INSIGHTS_DATABASE_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ XQUEUE_MYSQL_DB_NAME | default(None) }}",
+          user: "{{ XQUEUE_MYSQL_USER | default(None) }}",
+          pass: "{{ XQUEUE_MYSQL_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ EDXAPP_MYSQL_DB_NAME | default(None) }}",
+          user: "{{ EDXAPP_MYSQL_USER | default(None) }}",
+          pass: "{{ EDXAPP_MYSQL_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ EDXAPP_MYSQL_CSMH_DB_NAME | default(None) }}",
+          user: "{{ EDXAPP_MYSQL_CSMH_USER | default(None) }}",
+          pass: "{{ EDXAPP_MYSQL_CSMH_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ ANALYTICS_PIPELINE_OUTPUT_DATABASE_NAME | default(None) }}",
+          user: "{{ ANALYTICS_PIPELINE_OUTPUT_DATABASE_USER | default(None) }}",
+          pass: "{{ ANALYTICS_PIPELINE_OUTPUT_DATABASE_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ HIVE_METASTORE_DATABASE_NAME | default(None) }}",
+          user: "{{ HIVE_METASTORE_DATABASE_USER | default(None) }}",
+          pass: "{{ HIVE_METASTORE_DATABASE_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ BLOCKSTORE_DEFAULT_DB_NAME | default(None) }}",
+          user: "{{ BLOCKSTORE_DATABASE_USER | default(None) }}",
+          pass: "{{ BLOCKSTORE_DATABASE_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ CREDENTIALS_DEFAULT_DB_NAME | default(None) }}",
+          user: "{{ CREDENTIALS_MYSQL_USER | default(None) }}",
+          pass: "{{ CREDENTIALS_MYSQL_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ DISCOVERY_DEFAULT_DB_NAME | default(None) }}",
+          user: "{{ DISCOVERY_MYSQL_USER | default(None) }}",
+          pass: "{{ DISCOVERY_MYSQL_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ VEDA_WEB_FRONTEND_DEFAULT_DB_NAME | default(None) }}",
+          user: "{{ VEDA_WEB_FRONTEND_MYSQL_USER | default(None) }}",
+          pass: "{{ VEDA_WEB_FRONTEND_MYSQL_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ REGISTRAR_DEFAULT_DB_NAME | default(None) }}",
+          user: "{{ REGISTRAR_MYSQL_USER | default(None) }}",
+          pass: "{{ REGISTRAR_MYSQL_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ NOTIFIER_DATABASE_NAME | default(None) }}",
+          user: "{{ NOTIFIER_DATABASE_USER | default(None) }}",
+          pass: "{{ NOTIFIER_DATABASE_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ GAMMA_DB_NAME | default(None) }}",
+          user: "{{ GAMMA_DB_USER | default(None) }}",
+          pass: "{{ GAMMA_DB_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ ENTERPRISE_CATALOG_DEFAULT_DB_NAME | default(None) }}",
+          user: "{{ ENTERPRISE_CATALOG_MYSQL_USER | default(None) }}",
+          pass: "{{ ENTERPRISE_CATALOG_MYSQL_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ LICENSE_MANAGER_DEFAULT_DB_NAME | default(None) }}",
+          user: "{{ LICENSE_MANAGER_MYSQL_USER | default(None) }}",
+          pass: "{{ LICENSE_MANAGER_MYSQL_PASSWORD | default(None) }}"
+        }
+      - {
+          db: "{{ MUX_LTI_PRODUCER_DEFAULT_DB_NAME | default(None) }}",
+          user: "{{ MUX_LTI_PRODUCER_MYSQL_USER | default(None) }}",
+          pass: "{{ MUX_LTI_PRODUCER_MYSQL_PASSWORD | default(None) }}"
+        }
+
+- name: add the mysql signing key
+  apt_key:
+    keyserver: "keyserver.ubuntu.com"
+    id: "467B942D3A79BD29"
+  when: ansible_distribution_release == 'focal'
+
+- name: add the mysql-5.7 repo to the sources list
+  apt_repository:
+    repo: "deb http://repo.mysql.com/apt//ubuntu/ bionic mysql-5.7"
+    state: present
+  when: ansible_distribution_release == 'focal'
+
+- name: install mysql-5.7-client
+  apt:
+    name: "mysql-client"
+    state: present
+    update_cache: yes
+  when: ansible_distribution_release == 'focal'
+
+- name: Create /root/.my.cnf
+  copy:
+    dest: /root/.my.cnf
+    owner: root
+    mode: 0600
+    content: |
+      [client]
+      host = {{ edxlocal_mysql_host }}
+      user = {{ MYSQL_ADMIN_USER }}
+      password = {{ MYSQL_ADMIN_PASSWORD }}
+
+- name: create databases
+  mysql_db:
+    db: "{{ item }}"
+    state: present
+    encoding: utf8
+    login_host: "{{ edxlocal_mysql_host }}"
+    login_user: "{{ MYSQL_ADMIN_USER }}"
+    login_password: "{{ MYSQL_ADMIN_PASSWORD }}"
+  when: item != None and item != ''
+  with_items: "{{ edxlocal_databases }} + {{ edxlocal_extra_databases }}"
+  run_once: True
+
+- name: create database users
+  mysql_user:
+    name: "{{ item.user }}"
+    password: "{{ item.pass }}"
+    priv: "{{ item.priv | default(item.db~'.*:ALL') }}"
+    host: "{{ item.host | default(edxlocal_host) }}"
+    append_privs: yes
+    login_host: "{{ edxlocal_mysql_host }}"
+    login_user: "{{ MYSQL_ADMIN_USER }}"
+    login_password: "{{ MYSQL_ADMIN_PASSWORD }}"
+  no_log: True
+  when: item.db != None and item.db != '' and item.user != '' and item.pass != ''
+  with_items: "{{ edxlocal_database_users }} + {{ edxlocal_extra_database_users }}"
+  run_once: True
+
+- name: setup the migration db user
+  mysql_user:
+    name: "{{ COMMON_MYSQL_MIGRATE_USER }}"
+    password: "{{ COMMON_MYSQL_MIGRATE_PASS }}"
+    priv: "{{ item }}.*:ALL"
+    host: "{{ edxlocal_host }}"
+    append_privs: yes
+    login_host: "{{ edxlocal_mysql_host }}"
+    login_user: "{{ MYSQL_ADMIN_USER }}"
+    login_password: "{{ MYSQL_ADMIN_PASSWORD }}"
+  when: item != None and item != ''
+  with_items: "{{ edxlocal_databases }} + {{ edxlocal_extra_databases }}"
+  run_once: True
+
+- name: setup the edx-notes-api db user
+  mysql_user:
+    name: "{{ EDX_NOTES_API_MYSQL_DB_USER }}"
+    password: "{{ EDX_NOTES_API_MYSQL_DB_PASS }}"
+    priv: "{{ EDX_NOTES_API_MYSQL_DB_NAME }}.*:SELECT,INSERT,UPDATE,DELETE"
+    host: "{{ edxlocal_host }}"
+    login_host: "{{ edxlocal_mysql_host }}"
+    login_user: "{{ MYSQL_ADMIN_USER }}"
+    login_password: "{{ MYSQL_ADMIN_PASSWORD }}"
+  when: EDX_NOTES_API_MYSQL_DB_USER is defined
+  run_once: True
+
+- name: setup the read-only db user
+  mysql_user:
+    name: "{{ COMMON_MYSQL_READ_ONLY_USER }}"
+    password: "{{ COMMON_MYSQL_READ_ONLY_PASS }}"
+    priv: "*.*:SELECT,SHOW VIEW,PROCESS,REPLICATION CLIENT"
+    host: "{{ edxlocal_host }}"
+    login_host: "{{ edxlocal_mysql_host }}"
+    login_user: "{{ MYSQL_ADMIN_USER }}"
+    login_password: "{{ MYSQL_ADMIN_PASSWORD }}"
+  run_once: True

@@ -1,0 +1,771 @@
+---
+
+# This variables set by GHA flow in packer build config
+COMMON_ENVIRONMENT: "{{ lookup('env', 'ENVIRONMENT') }}"
+COMMON_OPENEDX_RELEASE_VERSION: "{{ lookup('env', 'OPENEDX_RELEASE') }}"
+AMI_NAME: "{{ lookup('env', 'AMI_NAME') }}"
+
+COMMON_DEPLOYMENT: "strata"
+EDXAPP_LOGGING_ENV: "{{ COMMON_ENVIRONMENT }}"
+
+EDXAPP_PLATFORM_NAME: "Dojo Alpha Learning Platform"
+EDXAPP_LANG: "ja_JP.UTF-8"
+EDXAPP_LOCALESET_FROM_REQUEST:
+  "en": "en_US.utf8"
+  "ja": "ja_JP.UTF-8"
+EDXAPP_LANGUAGE_CODE: "ja-jp"
+EDXAPP_TIME_ZONE: "Asia/Tokyo"
+
+COMMON_DEFAULT_FROM_EMAIL: 'no-reply@dojoalpha.com'
+
+COMMON_DOMAIN_NAME: "{{ COMMON_ENVIRONMENT }}.dojoalpha.com"
+EDXAPP_SITE_NAME: "{{ COMMON_DOMAIN_NAME }}"
+EDXAPP_CMS_SITE_NAME: "studio.{{ COMMON_DOMAIN_NAME }}"
+EDXAPP_PREVIEW_LMS_BASE: "preview.{{ COMMON_DOMAIN_NAME }}"
+EDXAPP_LMS_SITE_NAME: "{{ EDXAPP_SITE_NAME }}"
+EDXAPP_LMS_BASE: "{{ EDXAPP_SITE_NAME }}"
+EDXAPP_CMS_BASE: "{{ EDXAPP_CMS_SITE_NAME }}"
+EDXAPP_ANALYTICS_DASHBOARD_URL: !!null
+COMMON_ECOMMERCE_BASE_URL: !!null
+EDXAPP_SESSION_COOKIE_DOMAIN: ".{{ COMMON_DOMAIN_NAME }}"
+EDXAPP_BASE_COOKIE_DOMAIN: "{{ COMMON_DOMAIN_NAME }}"
+EDXAPP_LOGIN_REDIRECT_WHITELIST:
+  - "{{ EDXAPP_LMS_BASE }}"
+  - "{{ EDXAPP_CMS_BASE }}"
+  - "{{ EDXAPP_PREVIEW_LMS_BASE }}"
+  - "{{ DOJO_ENTERPRISE_LEARNER_PORTAL_DOMAIN }}"
+  - "{{ ADMIN_DASHBOARD_MICROFRONTEND_DOMAIN }}"
+  - "{{ DOJO_ENTERPRISE_ADMIN_PORTAL_DOMAIN }}"
+
+EDXAPP_LMS_BASE_SCHEME: "https"
+COMMON_LMS_BASE_URL: "{{ EDXAPP_LMS_BASE_SCHEME }}://{{ EDXAPP_LMS_BASE }}"
+EDXAPP_LMS_ROOT_URL: "{{ COMMON_LMS_BASE_URL }}"
+
+EDXAPP_SESSION_COOKIE_NAME: "{{ EDXAPP_LMS_SITE_NAME }}_edxapp"
+EDXAPP_CSRF_COOKIE_SECURE: true
+EDXAPP_SESSION_COOKIE_SECURE: true
+COMMON_JWT_AUTH_COOKIE_HEADER_PAYLOAD: "jwt-payload-{{ COMMON_ENVIRONMENT }}"
+COMMON_JWT_AUTH_COOKIE_SIGNATURE: "jwt-sig-{{ COMMON_ENVIRONMENT }}"
+COMMON_JWT_AUTH_REFRESH_COOKIE: "jwt-refresh-{{ COMMON_ENVIRONMENT }}"
+
+EDXAPP_USE_GIT_IDENTITY: False
+edx_platform_repo: "http://github.com/edx/edx-platform.git"
+EDX_PLATFORM_VERSION: "{{ COMMON_OPENEDX_RELEASE_VERSION }}"
+CONFIGURATION_VERSION: "{{ COMMON_OPENEDX_RELEASE_VERSION }}"
+COMMON_DOJO_REPO_VERSION: "master"
+SENTRY_SDK_VERSION: "1.5.8"
+COMMON_SENTRY_RELEASE: "{{ AMI_NAME }}"
+
+# allow verbose ansible output in git tasks to able to make diagnostics of failures
+# (may display git credentials in ansible output)
+COMMON_CONFIG_NO_LOGGING: False
+
+# reduce number of gunicorn DJango workers to save costs
+# remove or increase for Production
+worker_core_mult:
+  lms: 2
+  cms: 1
+# memory leaks protection
+# increase for Production
+EDXAPP_LMS_MAX_REQ: 100
+EDXAPP_CMS_MAX_REQ: 50
+EDXAPP_LMS_GUNICORN_EXTRA_CONF: "max_requests_jitter = 10"
+EDXAPP_CMS_GUNICORN_EXTRA_CONF: "max_requests_jitter = 5"
+
+# do not use on autoscaling instances
+# instead tune "worker_core_mult" to match workers memory consumption
+# and instance available memory
+SWAPFILE_SIZE: 4GB
+
+EDXAPP_EDX_PLATFORM_REVISION: "studio"
+EDXAPP_COURSE_CATALOG_VISIBILITY_PERMISSION: "see_in_catalog"
+EDXAPP_COURSE_ABOUT_VISIBILITY_PERMISSION: "see_about_page"
+
+ELASTICSEARCH_PORT: 80
+EDXAPP_SEARCH_HOST: "{{ ELASTICSEARCH_HOST }}"
+EDXAPP_SEARCH_PORT: "{{ ELASTICSEARCH_PORT }}"
+
+AWS_S3_REGION_NAME: 'ap-northeast-1'
+EDXAPP_GRADE_STORAGE_TYPE_LOCAL: false
+EDXAPP_GRADE_STORAGE_TYPE: ""
+EDXAPP_GRADE_BUCKET: "{{ EDXAPP_AWS_STORAGE_BUCKET_NAME }}"
+EDXAPP_GRADE_STORAGE_CLASS: "{{ EDXAPP_DEFAULT_FILE_STORAGE }}"
+EDXAPP_GRADE_STORAGE_KWARGS:
+  location: "grades"
+EDXAPP_GRADE_ROOT_PATH: "grades"
+
+NGINX_ENABLE_S3_PROXY: True
+EDXAPP_AWS_S3_CUSTOM_DOMAIN: "{{ EDXAPP_LMS_BASE if NGINX_ENABLE_S3_PROXY else 's3.'~AWS_S3_REGION_NAME~'.amazonaws.com' }}/{{ EDXAPP_AWS_STORAGE_BUCKET_NAME }}"
+EDXAPP_DEFAULT_FILE_STORAGE: "storages.backends.s3boto3.S3Boto3Storage"
+EDXAPP_IMPORT_EXPORT_BUCKET: "{{ EDXAPP_AWS_STORAGE_BUCKET_NAME }}"
+EDXAPP_PROFILE_IMAGE_BACKEND:
+  class: storages.backends.s3boto3.S3Boto3Storage
+  options:
+    location: profile-images
+    bucket: "{{ EDXAPP_AWS_STORAGE_BUCKET_NAME }}"
+    custom_domain: "{{ EDXAPP_AWS_S3_CUSTOM_DOMAIN }}"
+    headers:
+      Cache-Control: max-age-{{ EDXAPP_PROFILE_IMAGE_MAX_AGE }}
+
+EDXAPP_THEME_VERSION: '{{ COMMON_DOJO_REPO_VERSION }}'
+edxapp_theme_source_repo: "https://{{ GITHUB_REUSTLE_USER }}:{{ GITHUB_REUSTLE_TOKEN }}@github.com/reustleco/dojo-theme.git"
+edxapp_theme_name: 'dojo-theme'
+EDXAPP_COMPREHENSIVE_THEME_DIRS:  [ '/edx/app/edxapp/themes' ]
+EDXAPP_DEFAULT_SITE_THEME: "{{ edxapp_theme_name }}"
+EDXAPP_ENABLE_COMPREHENSIVE_THEMING: True
+
+# NGINX_ROBOT_RULES: []
+# remove for Production
+NGINX_ROBOT_RULES:
+  - agent: '*'
+    disallow: '/'
+
+DOJO_API_REPO: "https://{{ GITHUB_REUSTLE_USER }}:{{ GITHUB_REUSTLE_TOKEN }}@github.com/reustleco/dojo-api.git"
+DOJO_API_VERSION: "{{ COMMON_DOJO_REPO_VERSION }}"
+
+COMMON_LOGO_URL: "{{ COMMON_LMS_BASE_URL }}/static/dojo-theme/images/logo.png"
+COMMON_FAVICON_URL: "{{ COMMON_LMS_BASE_URL }}/static/images/favicon.ico"
+
+EDXAPP_EXTRA_REQUIREMENTS:
+  - name: "edx-sga==0.16.0"
+  - name: "git+{{ DOJO_API_REPO }}@{{ DOJO_API_VERSION }}#egg=dojo_api"
+    extra_args: "-e"
+  - name: "git+{{ DOJO_CUSTOMER_ANALYTICS_REPO }}@{{ DOJO_CUSTOMER_ANALYTICS_VERSION }}#egg=dojo_customer_analytics"
+    extra_args: "-e"
+  - name: "sentry-sdk=={{ SENTRY_SDK_VERSION }}"
+    extra_args: "--no-deps"
+  - name: "django-celery-beat==2.2.0"
+  - name: "git+https://github.com/overhangio/openedx-scorm-xblock.git@833e1e1ca2bf180afc9c8adddf407c10e37f8425#egg=openedx-scorm-xblock==11.2.1"
+    extra_args: "-e"
+  - name: "git+https://github.com/citynetwork/markdown-xblock.git#egg=markdown-xblock"
+    extra_args: "-e"
+  - name: "git+https://github.com/strata-kk/mux-videos-xblock.git#egg=mux-xblock"
+    extra_args: "-e"
+    
+EDXAPP_FEATURES_EXTRA:
+  ALLOW_ALL_ADVANCED_COMPONENTS: True
+  ENABLE_HELP_LINK: False
+  ENABLE_ENTERPRISE_INTEGRATION: "{{ ENTERPRISE_ENABLED }}"
+  ENABLE_DISCUSSION_SERVICE: "{{ FORUM_ENABLED }}"
+  ENABLE_DISCUSSION_HOME_PANEL: "{{ FORUM_ENABLED }}"
+  COURSES_ARE_BROWSABLE: False
+  MILESTONES_APP: True
+  ENABLE_PREREQUISITE_COURSES: True
+  THIRD_PARTY_AUTH_SAML_FETCH_PERIOD_HOURS: !!null
+
+EDXAPP_ENV_EXTRA:
+  AUTHN_MICROFRONTEND_URL: "{{ AUTHN_MICROFRONTEND_URL }}"
+  AUTHN_MICROFRONTEND_DOMAIN: "{{ AUTHN_MICROFRONTEND_DOMAIN }}"
+  ADMIN_DASHBOARD_MICROFRONTEND_URL: "{{ ADMIN_DASHBOARD_MICROFRONTEND_URL }}"
+  GRADER_DASHBOARD_MICROFRONTEND_URL: "{{ GRADER_DASHBOARD_MICROFRONTEND_URL }}"
+  AWS_S3_REGION_NAME: "{{ AWS_S3_REGION_NAME }}"
+  AWS_DEFAULT_ACL: 'private'
+
+  CELERY_IMPORTS: []
+  SENTRY_DSN: "{{ COMMON_SENTRY_DSN }}"
+  SENTRY_ENVIRONMENT: "{{ COMMON_ENVIRONMENT }}"
+  SENTRY_RELEASE: "{{ COMMON_SENTRY_RELEASE }}"
+  ADVANCED_PROBLEM_TYPES:
+    # default advanced modules
+    # defined [in CMS code](https://github.com/edx/edx-platform/blob/open-release/koa.3/cms/envs/common.py#L1708)
+    - component: 'openassessment'
+      boilerplate_name: !!null
+    - component: 'drag-and-drop-v2'
+      boilerplate_name: !!null
+    - component: 'staffgradedxblock'
+      boilerplate_name: !!null
+    #
+    # custom advanced modules [DJ-105]
+    #
+    - component: 'edx_sga'
+      boilerplate_name: !!null
+    - component: 'lti_consumer'
+      boilerplate_name: !!null
+  ADDL_INSTALLED_APPS:
+    - 'django_celery_beat'
+  DEFAULT_EMAIL_LOGO_URL: "{{ COMMON_LOGO_URL }}"
+  LOGO_URL_PNG: "{{ COMMON_LOGO_URL }}"
+  LOGO_URL: "{{ COMMON_LOGO_URL }}"
+  MAX_ASSET_UPLOAD_FILE_SIZE_IN_MB: "{{ EDXAPP_MAX_ASSET_UPLOAD_FILE_SIZE_IN_MB }}"
+  PROFILE_IMAGE_HASH_SEED: "{{ EDXAPP_PROFILE_IMAGE_SECRET_KEY }}"
+  ENTERPRISE_CATALOG_INTERNAL_ROOT_URL: "{{ ENTERPRISE_CATALOG_URL_ROOT }}"
+  ENTERPRISE_LEARNER_PORTAL_BASE_URL: "{{ DOJO_ENTERPRISE_LEARNER_PORTAL_URL }}"
+  ENTERPRISE_ADMIN_PORTAL_BASE_URL: "{{ DOJO_ENTERPRISE_ADMIN_PORTAL_URL }}"
+  LICENSE_MANAGER_URL_ROOT: "{{ LICENSE_MANAGER_URL_ROOT }}"
+  LICENSE_MANAGER_API_URL: "{{ LICENSE_MANAGER_URL_ROOT }}/api/v1"
+  LTI_DEFAULT_MUX_PASSPORT_ID: 'mux'
+  LTI_DEFAULT_PRODUCER_LAUNCH_URL: "{{ MUX_LTI_PRODUCER_URL }}/lti/1.1/launch"
+
+FORUM_ENABLED: False
+FORUM_VERSION: "{{ COMMON_OPENEDX_RELEASE_VERSION }}"
+FORUM_ELASTICSEARCH_HOST: "{{ ELASTICSEARCH_HOST }}"
+FORUM_ELASTICSEARCH_HOST_ES7: "{{ FORUM_ELASTICSEARCH_HOST }}"
+FORUM_ELASTICSEARCH_PORT: "{{ ELASTICSEARCH_PORT }}"
+FORUM_MONGO_HOSTS: 
+ - "{{ EDXAPP_MONGO_HOSTS }}"
+FORUM_MONGO_URL: "mongodb://{{ FORUM_MONGO_USER }}:{{ FORUM_MONGO_PASSWORD }}@{{ EDXAPP_MONGO_HOSTS }}:27017/{{ FORUM_MONGO_DATABASE }}?replicaSet={{ MONGO_REPL_SET }}&readPreference=secondaryPreferred&retryWrites=false"
+forum_services:
+  - {service: "elasticsearch", host: "{{ FORUM_ELASTICSEARCH_HOST }}", port: "{{ FORUM_ELASTICSEARCH_PORT }}"}
+
+CELERYBEAT_QUEUE_NAME: "edx.lms.core.high_mem"
+
+# TODO: move migration task out of image build process
+migrate_db: "yes"
+
+EDXAPP_WAFFLE_SWITCHES:
+  completion.enable_completion_tracking: "on"
+
+EDXAPP_WAFFLE_FLAGS:
+  course_home.course_home_mfe_progress_tab: "--superusers --staff --everyone"
+  account.redirect_to_microfrontend: "--superusers --staff --everyone"
+  learner_profile.redirect_to_microfrontend: "--superusers --staff --everyone"
+  learning_sequences.use_for_outlines: "--superusers --staff --everyone"
+  user_authn.redirect_to_microfrontend: "--superusers --staff --everyone"
+
+EDXAPP_ENABLE_FORUM_NOTIFICATIONS: "{{ FORUM_ENABLED }}"
+EDXAPP_ENABLE_PROFILE_MICROFRONTEND: True
+EDXAPP_ENABLE_AUTHN_MICROFRONTEND: True
+EDXAPP_ENABLE_OAUTH2_PROVIDER: "{{ ENTERPRISE_ENABLED }}"
+
+EDXAPP_DEFAULT_SITE_CONFIG:
+  enable_forum_notifications: "{{ EDXAPP_ENABLE_FORUM_NOTIFICATIONS }}"
+  ENABLE_PROFILE_MICROFRONTEND: "{{ EDXAPP_ENABLE_PROFILE_MICROFRONTEND }}"
+  ENABLE_AUTHN_MICROFRONTEND: "{{ EDXAPP_ENABLE_AUTHN_MICROFRONTEND }}"
+  COURSE_CATALOG_API_URL: "{{ EDXAPP_COURSE_CATALOG_API_URL }}"
+
+EDXAPP_MAX_ASSET_UPLOAD_FILE_SIZE_IN_MB: 600
+
+# copy-paste from https://github.com/edx/configuration/blob/open-release/lilac.1/playbooks/roles/edxapp/defaults/main.yml#L1146
+# Can not be overrided by Ansible variable
+edxapp_generic_doc_store_config: &edxapp_generic_default_docstore
+  db: "{{ EDXAPP_MONGO_DB_NAME }}"
+  host: "{{ EDXAPP_MONGO_HOSTS }}"
+  replicaSet: "{{ EDXAPP_MONGO_REPLICA_SET }}"
+  password: "{{ EDXAPP_MONGO_PASSWORD }}"
+  port: "{{ EDXAPP_MONGO_PORT }}"
+  user: "{{ EDXAPP_MONGO_USER }}"
+  collection:  'modulestore'
+  ssl: "{{ EDXAPP_MONGO_USE_SSL }}"
+  # https://api.mongodb.com/python/2.9.1/api/pymongo/mongo_client.html#module-pymongo.mongo_client
+  socketTimeoutMS: 3000 # default is never timeout while the connection is open, this means it needs to explicitly close raising pymongo.errors.NetworkTimeout
+  connectTimeoutMS: 2000 # default is 20000, I believe raises pymongo.errors.ConnectionFailure
+  # Not setting waitQueueTimeoutMS and waitQueueMultiple since pymongo defaults to nobody being allowed to wait
+  authsource: "{{ EDXAPP_MONGO_AUTH_DB }}"
+
+EDXAPP_LMS_DRAFT_DOC_STORE_CONFIG:
+  <<: *edxapp_generic_default_docstore
+  read_preference: "{{ EDXAPP_LMS_DRAFT_DOC_STORE_READ_PREFERENCE }}"
+  retrywrites: false
+
+EDXAPP_LMS_SPLIT_DOC_STORE_CONFIG:
+  <<: *edxapp_generic_default_docstore
+  read_preference: "{{ EDXAPP_LMS_SPLIT_DOC_STORE_READ_PREFERENCE }}"
+  retrywrites: false
+
+EDXAPP_CMS_DOC_STORE_CONFIG:
+  <<: *edxapp_generic_default_docstore
+  read_preference: "{{ EDXAPP_MONGO_CMS_READ_PREFERENCE }}"
+  retrywrites: false
+
+# This is a hack. MFE_NAME variable defined inside mfe_deployer and mfe roles. Not in this file.
+MFE_HOSTNAME: "{{ MFE_NAME }}.{{ MFE_BASE }}"
+MFE_DEPLOY_STANDALONE_NGINX: True
+
+MFE_BASE_SCHEMA: "{{ EDXAPP_LMS_BASE_SCHEME }}"
+MFE_BASE: "{{ COMMON_DOMAIN_NAME }}"
+MFE_SITE_NAME: "{{ EDXAPP_PLATFORM_NAME }}"
+MFE_LANGUAGE_PREFERENCE_COOKIE_NAME: "{{ EDXAPP_LANGUAGE_COOKIE }}"
+
+# Please note about mfe_deployer role peculiarity in nginx configuration!
+# MFE domain name MUST be a combination of MFE name and MFE base.
+# To use specific domain name (not a "{{ MFE_NAME }}.{{ MFE_BASE }}"),
+# ones need to turn off MFE_DEPLOY_STANDALONE_NGINX
+# and deploy a custom nginx configuration for all! MFE sites.
+# Investigation can be started here - https://github.com/openedx/configuration/blob/master/playbooks/roles/mfe_deployer/tasks/main.yml#L26
+EDXAPP_LEARNING_MICROFRONTEND_VERSION: "{{ COMMON_OPENEDX_RELEASE_VERSION }}"
+EDXAPP_LEARNING_MICROFRONTEND_BASE_NAME: "learning"
+EDXAPP_LEARNING_MICROFRONTEND_DOMAIN: "{{ EDXAPP_LEARNING_MICROFRONTEND_BASE_NAME }}.{{ MFE_BASE }}"
+EDXAPP_LEARNING_MICROFRONTEND_URL: "{{ EDXAPP_LMS_BASE_SCHEME }}://{{ EDXAPP_LEARNING_MICROFRONTEND_DOMAIN }}"
+
+EDXAPP_ACCOUNT_MICROFRONTEND_VERSION: "{{ COMMON_OPENEDX_RELEASE_VERSION }}"
+EDXAPP_ACCOUNT_MICROFRONTEND_BASE_NAME: "account"
+EDXAPP_ACCOUNT_MICROFRONTEND_DOMAIN: "{{ EDXAPP_ACCOUNT_MICROFRONTEND_BASE_NAME }}.{{ MFE_BASE }}"
+EDXAPP_ACCOUNT_MICROFRONTEND_URL: "{{ EDXAPP_LMS_BASE_SCHEME }}://{{ EDXAPP_ACCOUNT_MICROFRONTEND_DOMAIN }}"
+
+EDXAPP_PROFILE_MICROFRONTEND_VERSION: "{{ COMMON_OPENEDX_RELEASE_VERSION }}"
+EDXAPP_PROFILE_MICROFRONTEND_BASE_NAME: "profile"
+EDXAPP_PROFILE_MICROFRONTEND_DOMAIN: "{{ EDXAPP_PROFILE_MICROFRONTEND_BASE_NAME }}.{{ MFE_BASE }}"
+EDXAPP_PROFILE_MICROFRONTEND_URL: "{{ EDXAPP_LMS_BASE_SCHEME }}://{{ EDXAPP_PROFILE_MICROFRONTEND_DOMAIN }}/u/"
+
+# https://github.com/openedx/frontend-app-authn does not adhere 
+# to the release version tagging. pinned to commit from 'master' branch
+AUTHN_MICROFRONTEND_VERSION: "b04257a62d13105372ccaca76363010a975afc7e"
+AUTHN_MICROFRONTEND_BASE_NAME: "authn"
+AUTHN_MICROFRONTEND_DOMAIN: "{{ AUTHN_MICROFRONTEND_BASE_NAME }}.{{ MFE_BASE }}"
+AUTHN_MICROFRONTEND_URL: "{{ EDXAPP_LMS_BASE_SCHEME }}://{{ AUTHN_MICROFRONTEND_DOMAIN }}"
+
+ADMIN_DASHBOARD_MICROFRONTEND_VERSION: "{{ COMMON_DOJO_REPO_VERSION }}"
+ADMIN_DASHBOARD_MICROFRONTEND_BASE_NAME: "dojo-admin"
+ADMIN_DASHBOARD_MICROFRONTEND_DOMAIN: "{{ ADMIN_DASHBOARD_MICROFRONTEND_BASE_NAME }}.{{ MFE_BASE }}"
+ADMIN_DASHBOARD_MICROFRONTEND_URL: "{{ EDXAPP_LMS_BASE_SCHEME }}://{{ ADMIN_DASHBOARD_MICROFRONTEND_DOMAIN }}"
+
+GRADER_DASHBOARD_MICROFRONTEND_VERSION: "{{ COMMON_DOJO_REPO_VERSION }}"
+GRADER_DASHBOARD_MICROFRONTEND_BASE_NAME: "dojo-grader"
+GRADER_DASHBOARD_MICROFRONTEND_DOMAIN: "{{ GRADER_DASHBOARD_MICROFRONTEND_BASE_NAME }}.{{ MFE_BASE }}"
+GRADER_DASHBOARD_MICROFRONTEND_URL: "{{ EDXAPP_LMS_BASE_SCHEME }}://{{ GRADER_DASHBOARD_MICROFRONTEND_DOMAIN }}"
+
+DOJO_ENTERPRISE_ADMIN_PORTAL_VERSION: "{{ COMMON_DOJO_REPO_VERSION }}"
+DOJO_ENTERPRISE_ADMIN_PORTAL_BASE_NAME: "enterprise-admin"
+DOJO_ENTERPRISE_ADMIN_PORTAL_DOMAIN: "{{ DOJO_ENTERPRISE_ADMIN_PORTAL_BASE_NAME }}.{{ MFE_BASE }}"
+DOJO_ENTERPRISE_ADMIN_PORTAL_URL: "{{ EDXAPP_LMS_BASE_SCHEME }}://{{ DOJO_ENTERPRISE_ADMIN_PORTAL_DOMAIN }}"
+
+DOJO_ENTERPRISE_LEARNER_PORTAL_VERSION: "{{ COMMON_DOJO_REPO_VERSION }}"
+DOJO_ENTERPRISE_LEARNER_PORTAL_BASE_NAME: "enterprise-lms"
+DOJO_ENTERPRISE_LEARNER_PORTAL_DOMAIN: "{{ DOJO_ENTERPRISE_LEARNER_PORTAL_BASE_NAME }}.{{ MFE_BASE }}"
+DOJO_ENTERPRISE_LEARNER_PORTAL_URL: "{{ EDXAPP_LMS_BASE_SCHEME }}://{{ DOJO_ENTERPRISE_LEARNER_PORTAL_DOMAIN }}"
+
+DOJO_CUSTOMER_ANALYTICS_VERSION: "{{ COMMON_DOJO_REPO_VERSION }}"
+DOJO_CUSTOMER_ANALYTICS_BASE_NAME: "enterprise-analytics"
+DOJO_CUSTOMER_ANALYTICS_DOMAIN: "{{ DOJO_CUSTOMER_ANALYTICS_BASE_NAME }}.{{ MFE_BASE }}"
+DOJO_CUSTOMER_ANALYTICS_URL: "{{ EDXAPP_LMS_BASE_SCHEME }}://{{ DOJO_CUSTOMER_ANALYTICS_DOMAIN }}"
+DOJO_CUSTOMER_ANALYTICS_REPO: "https://{{ GITHUB_REUSTLE_USER }}:{{ GITHUB_REUSTLE_TOKEN }}@github.com/reustleco/dojo-customer-analytics.git"
+
+MFES:
+  - name: "{{ ADMIN_DASHBOARD_MICROFRONTEND_BASE_NAME }}"
+    git_protocol: "https"
+    git_domain: "{{ GITHUB_REUSTLE_USER }}:{{ GITHUB_REUSTLE_TOKEN }}@github.com"
+    git_path: "reustleco"
+    repo: "dojo-frontend-admin"
+    version: "{{ ADMIN_DASHBOARD_MICROFRONTEND_VERSION }}"
+    git_identity: !!null
+    env_extra:
+      DOJO_INSTRUCTOR_URL: "{{ GRADER_DASHBOARD_MICROFRONTEND_URL }}"
+      SENTRY_DSN: "{{ COMMON_SENTRY_DSN_FRONTEND }}"
+      SENTRY_ENVIRONMENT: "{{ COMMON_ENVIRONMENT }}"
+      SENTRY_RELEASE: "{{ COMMON_SENTRY_RELEASE }}"
+      NPM_AUTH_TOKEN: "{{ GITHUB_REUSTLE_TOKEN }}"
+  - name: "{{ GRADER_DASHBOARD_MICROFRONTEND_BASE_NAME }}"
+    git_protocol: "https"
+    git_domain: "{{ GITHUB_REUSTLE_USER }}:{{ GITHUB_REUSTLE_TOKEN }}@github.com"
+    git_path: "reustleco"
+    repo: "dojo-frontend-instructor"
+    version: "{{ GRADER_DASHBOARD_MICROFRONTEND_VERSION }}"
+    git_identity: !!null
+    env_extra:
+      SENTRY_DSN: "{{ COMMON_SENTRY_DSN_FRONTEND }}"
+      SENTRY_ENVIRONMENT: "{{ COMMON_ENVIRONMENT }}"
+      SENTRY_RELEASE: "{{ COMMON_SENTRY_RELEASE }}"
+      NPM_AUTH_TOKEN: "{{ GITHUB_REUSTLE_TOKEN }}"
+  - name: "{{ EDXAPP_LEARNING_MICROFRONTEND_BASE_NAME }}"
+    git_protocol: "https"
+    repo: "frontend-app-learning"
+    version: "{{ EDXAPP_LEARNING_MICROFRONTEND_VERSION }}"
+  - name: "{{ EDXAPP_ACCOUNT_MICROFRONTEND_BASE_NAME }}"
+    git_protocol: "https"
+    repo: "frontend-app-account"
+    version: "{{ EDXAPP_ACCOUNT_MICROFRONTEND_VERSION }}"
+  - name: "{{ EDXAPP_PROFILE_MICROFRONTEND_BASE_NAME }}"
+    git_protocol: "https"
+    repo: "frontend-app-profile"
+    version: "{{ EDXAPP_PROFILE_MICROFRONTEND_VERSION }}"
+  - name: "{{ AUTHN_MICROFRONTEND_BASE_NAME }}"
+    git_protocol: "https"
+    repo: "frontend-app-authn"
+    version: "{{ AUTHN_MICROFRONTEND_VERSION }}"
+  - name: "{{ DOJO_ENTERPRISE_ADMIN_PORTAL_BASE_NAME }}"
+    git_protocol: "https"
+    git_path: "reustleco"
+    repo: "dojo-frontend-app-admin-portal"
+    version: "{{ DOJO_ENTERPRISE_ADMIN_PORTAL_VERSION }}"
+    env_extra:
+      FEATURE_BULK_ENROLLMENT: true
+      FEATURE_CODE_MANAGEMENT: true
+      FEATURE_SUPPORT: true
+      LICENSE_MANAGER_BASE_URL: "{{ LICENSE_MANAGER_URL_ROOT }}"
+      LICENSE_MANAGER_URL: "{{ LICENSE_MANAGER_URL_ROOT }}"
+      ENTERPRISE_LEARNER_PORTAL_URL: "{{ DOJO_ENTERPRISE_LEARNER_PORTAL_URL }}"
+      LMS_BASE_URL: "{{ EDXAPP_LMS_ROOT_URL }}"
+      ANALYTICS_BASE_URL: "{{ DOJO_CUSTOMER_ANALYTICS_URL }}"
+      SENTRY_DSN: "{{ COMMON_SENTRY_DSN_FRONTEND }}"
+      SENTRY_ENVIRONMENT: "{{ COMMON_ENVIRONMENT }}"
+      SENTRY_RELEASE: "{{ COMMON_SENTRY_RELEASE }}"
+      NPM_AUTH_TOKEN: "{{ GITHUB_REUSTLE_TOKEN }}"
+  - name: "{{ DOJO_ENTERPRISE_LEARNER_PORTAL_BASE_NAME }}"
+    git_protocol: "https"
+    git_path: "reustleco"
+    repo: "dojo-frontend-app-learner-portal"
+    version: "{{ DOJO_ENTERPRISE_LEARNER_PORTAL_VERSION }}"
+    env_extra:
+      BASE_URL: "{{ DOJO_ENTERPRISE_LEARNER_PORTAL_URL }}"
+      ALGOLIA_APP_ID: "{{ ENTERPRISE_CATALOG_ALGOLIA['APPLICATION_ID'] }}"
+      ALGOLIA_SEARCH_API_KEY: "{{ VAULT_ENTERPRISE_CATALOG_ALGOLIA_SEARCHONLY_API_KEY }}"
+      ALGOLIA_INDEX_NAME: "{{ ENTERPRISE_CATALOG_ALGOLIA['INDEX_NAME'] }}"
+      LICENSE_MANAGER_URL: "{{ LICENSE_MANAGER_URL_ROOT }}"
+      ENTERPRISE_CATALOG_API_BASE_URL: "{{ ENTERPRISE_CATALOG_URL_ROOT }}"
+      DISCOVERY_API_BASE_URL: "{{ DISCOVERY_URL_ROOT }}"
+      LMS_BASE_URL: "{{ EDXAPP_LMS_ROOT_URL }}"
+      SENTRY_DSN: "{{ COMMON_SENTRY_DSN_FRONTEND }}"
+      SENTRY_ENVIRONMENT: "{{ COMMON_ENVIRONMENT }}"
+      SENTRY_RELEASE: "{{ COMMON_SENTRY_RELEASE }}"
+      NPM_AUTH_TOKEN: "{{ GITHUB_REUSTLE_TOKEN }}"
+  - name: "{{ DOJO_CUSTOMER_ANALYTICS_BASE_NAME }}"
+    git_protocol: "https"
+    git_domain: "{{ GITHUB_REUSTLE_USER }}:{{ GITHUB_REUSTLE_TOKEN }}@github.com"
+    git_path: "reustleco"
+    repo: "dojo-frontend-customer-analytics"
+    version: "{{ DOJO_CUSTOMER_ANALYTICS_VERSION }}"
+    git_identity: !!null
+    env_extra:
+      SENTRY_DSN: "{{ COMMON_SENTRY_DSN_FRONTEND }}"
+      SENTRY_ENVIRONMENT: "{{ COMMON_ENVIRONMENT }}"
+      SENTRY_RELEASE: "{{ COMMON_SENTRY_RELEASE }}"
+      NPM_AUTH_TOKEN: "{{ GITHUB_REUSTLE_TOKEN }}"
+
+EDXAPP_ENABLE_CORS_HEADERS: True
+EDXAPP_CORS_ORIGIN_WHITELIST:
+  - "{{ EDXAPP_LMS_ROOT_URL }}"
+  - "{{ EDXAPP_LMS_BASE_SCHEME }}://{{ EDXAPP_CMS_BASE }}"
+  - "{{ ADMIN_DASHBOARD_MICROFRONTEND_URL }}"
+  - "{{ GRADER_DASHBOARD_MICROFRONTEND_URL }}"
+  - "{{ EDXAPP_LEARNING_MICROFRONTEND_URL }}"
+  - "{{ EDXAPP_ACCOUNT_MICROFRONTEND_URL }}"
+  - "{{ EDXAPP_LMS_BASE_SCHEME }}://{{ EDXAPP_PROFILE_MICROFRONTEND_DOMAIN }}"
+  - "{{ AUTHN_MICROFRONTEND_URL }}"
+  - "{{ DOJO_ENTERPRISE_LEARNER_PORTAL_URL }}"
+  - "{{ DOJO_ENTERPRISE_ADMIN_PORTAL_URL }}"
+  - "{{ DOJO_CUSTOMER_ANALYTICS_URL }}"
+
+EDXAPP_CSRF_TRUSTED_ORIGINS:
+  - "{{ EDXAPP_LMS_SITE_NAME }}"
+  - "{{ EDXAPP_CMS_BASE }}"
+  - "{{ ADMIN_DASHBOARD_MICROFRONTEND_DOMAIN }}"
+  - "{{ GRADER_DASHBOARD_MICROFRONTEND_DOMAIN }}"
+  - "{{ EDXAPP_LEARNING_MICROFRONTEND_DOMAIN }}"
+  - "{{ EDXAPP_ACCOUNT_MICROFRONTEND_DOMAIN }}"
+  - "{{ EDXAPP_PROFILE_MICROFRONTEND_DOMAIN }}"
+  - "{{ AUTHN_MICROFRONTEND_DOMAIN }}"
+  - "{{ DOJO_ENTERPRISE_LEARNER_PORTAL_DOMAIN }}"
+  - "{{ DOJO_ENTERPRISE_ADMIN_PORTAL_DOMAIN }}"
+
+edx_django_service_extra_requirements:
+  - name: "sentry-sdk"
+    version: "{{ SENTRY_SDK_VERSION }}"
+    extra_args: "--no-deps"
+
+MONGO_VERSION_PATCH: "19"
+
+# edX Enterprise components
+
+ENTERPRISE_ENABLED: True
+
+# commit in 'maple.master' branch is used due to pip package dependency issue
+# https://woven-dojo.atlassian.net/browse/DP-156
+ENTERPRISE_CATALOG_VERSION: "3c6aac427cc4e45d5d808c0b12680d92093e28b5"
+ENTERPRISE_CATALOG_DOMAIN: "enterprise-catalog.{{ COMMON_DOMAIN_NAME }}"
+ENTERPRISE_CATALOG_URL_ROOT: "{{ EDXAPP_LMS_BASE_SCHEME }}://{{ ENTERPRISE_CATALOG_DOMAIN }}"
+ENTERPRISE_CATALOG_CELERY_BROKER_HOSTNAME: "{{ EDXAPP_REDIS_HOSTNAME }}"
+ENTERPRISE_CATALOG_CELERY_BROKER_TRANSPORT: "{{ EDXAPP_CELERY_BROKER_TRANSPORT }}"
+ENTERPRISE_CATALOG_CELERY_BROKER_USER: "{{ EDXAPP_CELERY_USER }}"
+ENTERPRISE_CATALOG_CELERY_BROKER_PASSWORD: "{{ EDXAPP_CELERY_PASSWORD }}"
+ENTERPRISE_CATALOG_CORS_ORIGIN_WHITELIST:
+  - "{{ EDXAPP_LMS_ROOT_URL }}"
+  - "{{ DOJO_ENTERPRISE_LEARNER_PORTAL_URL }}"
+  - "{{ DOJO_ENTERPRISE_ADMIN_PORTAL_URL }}"
+ENTERPRISE_CATALOG_ALGOLIA:
+  INDEX_NAME: "{{ COMMON_DOMAIN_NAME }}"
+  APPLICATION_ID: "{{ VAULT_ENTERPRISE_CATALOG_ALGOLIA_ID }}"
+  API_KEY: "{{ VAULT_ENTERPRISE_CATALOG_ALGOLIA_ADMIN_API_KEY }}"
+ENTERPRISE_CATALOG_MYSQL_HOST: "{{ EDXAPP_MYSQL_HOST }}"
+enterprise_catalog_service_config_overrides:
+  CERTIFICATE_LANGUAGES: '{{ ENTERPRISE_CATALOG_CERTIFICATE_LANGUAGES }}'
+  ENTERPRISE_CATALOG_SERVICE_USER: '{{ ENTERPRISE_CATALOG_SERVICE_USER }}'
+  LANGUAGE_COOKIE_NAME: '{{ ENTERPRISE_CATALOG_LANGUAGE_COOKIE_NAME }}'
+  CSRF_COOKIE_SECURE: "{{ ENTERPRISE_CATALOG_CSRF_COOKIE_SECURE }}"
+  CELERY_ALWAYS_EAGER: '{{ ENTERPRISE_CATALOG_CELERY_ALWAYS_EAGER }}'
+  CELERY_BROKER_TRANSPORT: '{{ ENTERPRISE_CATALOG_CELERY_BROKER_TRANSPORT }}'
+  CELERY_BROKER_USER: '{{ ENTERPRISE_CATALOG_CELERY_BROKER_USER }}'
+  CELERY_BROKER_PASSWORD: '{{ ENTERPRISE_CATALOG_CELERY_BROKER_PASSWORD }}'
+  CELERY_BROKER_HOSTNAME: '{{ ENTERPRISE_CATALOG_CELERY_BROKER_HOSTNAME }}'
+  CELERY_BROKER_VHOST: '{{ ENTERPRISE_CATALOG_CELERY_BROKER_VHOST }}'
+  CELERY_DEFAULT_EXCHANGE: 'enterprise_catalog'
+  CELERY_DEFAULT_ROUTING_KEY: 'enterprise_catalog'
+  CELERY_DEFAULT_QUEUE: '{{ enterprise_catalog_celery_default_queue }}'
+  CSRF_TRUSTED_ORIGINS: '{{ EDXAPP_CSRF_TRUSTED_ORIGINS }}'
+  CORS_ORIGIN_ALLOW_ALL: false
+  CORS_ORIGIN_WHITELIST: '{{ ENTERPRISE_CATALOG_CORS_ORIGIN_WHITELIST }}'
+  ENTERPRISE_CATALOG_URL: '{{ ENTERPRISE_CATALOG_URL_ROOT }}'
+  SENTRY_DSN: "{{ COMMON_SENTRY_DSN }}"
+  SENTRY_ENVIRONMENT: "{{ COMMON_ENVIRONMENT }}-enterprise-catalog"
+  SENTRY_RELEASE: "{{ COMMON_SENTRY_RELEASE }}"
+
+# commit in 'maple.master' is used due to pip package dependency issue
+# https://woven-dojo.atlassian.net/browse/DP-156
+LICENSE_MANAGER_VERSION: "94940aad4c3daa296d1134e43596111e3dfcda0e"
+
+LICENSE_MANAGER_LMS_BASE_URL: "{{ EDXAPP_LMS_ROOT_URL }}"
+LICENSE_MANAGER_DOMAIN: "license-manager.{{ COMMON_DOMAIN_NAME }}"
+LICENSE_MANAGER_URL_ROOT: '{{ EDXAPP_LMS_BASE_SCHEME }}://{{ LICENSE_MANAGER_DOMAIN }}'
+LICENSE_MANAGER_CORS_ORIGIN_WHITELIST: "{{ ENTERPRISE_CATALOG_CORS_ORIGIN_WHITELIST }}"
+LICENSE_MANAGER_CSRF_COOKIE_SECURE: True
+LICENSE_MANAGER_CSRF_TRUSTED_ORIGINS: "{{ EDXAPP_CSRF_TRUSTED_ORIGINS }}"
+LICENSE_MANAGER_MYSQL_HOST: "{{ EDXAPP_MYSQL_HOST }}"
+LICENSE_MANAGER_CELERY_BROKER_HOSTNAME: "{{ EDXAPP_REDIS_HOSTNAME }}"
+LICENSE_MANAGER_CELERY_BROKER_TRANSPORT: "{{ EDXAPP_CELERY_BROKER_TRANSPORT }}"
+LICENSE_MANAGER_CELERY_BROKER_USER: "{{ EDXAPP_CELERY_USER }}"
+LICENSE_MANAGER_CELERY_BROKER_PASSWORD: "{{ EDXAPP_CELERY_PASSWORD }}"
+license_manager_gunicorn_port: 8170
+
+# bug fix for licence_manager config CONN_MAX_AGE variable
+# CONN_MAX_AGE appears as string in the yaml file and can not be parsed by mysql backend library
+# we just drops CONN_MAX_AGE from config
+# WARNING! this variable must have same values with current OpenEdx release
+# configuration - https://github.com/edx/configuration/blob/open-release/maple.1/playbooks/roles/edx_django_service/defaults/main.yml#L148
+license_manager_edx_django_service_databases:
+  default:
+    ENGINE: 'django.db.backends.mysql'
+    NAME: '{{ edx_django_service_default_db_name }}'
+    USER: '{{ edx_django_service_db_user }}'
+    PASSWORD: '{{ edx_django_service_db_password }}'
+    HOST: '{{ edx_django_service_default_db_host }}'
+    PORT: '3306'
+    ATOMIC_REQUESTS: '{{ edx_django_service_default_db_atomic_requests }}'
+    OPTIONS: '{{ edx_django_service_db_options }}'
+
+# bug fix for absent settings LMS_URL, ENTERPRISE_LEARNER_PORTAL_BASE_URL, EMAIL_*, SUBSCRIPTIONS_FROM_EMAIL
+# WARNING! this variable must have same values with current OpenEdx release
+# configuration - https://github.com/edx/configuration/blob/open-release/maple.2/playbooks/roles/license_manager/defaults/main.yml#L127
+license_manager_service_config_overrides:
+  CERTIFICATE_LANGUAGES: '{{ LICENSE_MANAGER_CERTIFICATE_LANGUAGES }}'
+  LICENSE_MANAGER_SERVICE_USER: '{{ LICENSE_MANAGER_SERVICE_USER }}'
+  LANGUAGE_COOKIE_NAME: '{{ LICENSE_MANAGER_LANGUAGE_COOKIE_NAME }}'
+  SEGMENT_KEY: "{{ LICENSE_MANAGER_SEGMENT_KEY }}"
+  DISCOVERY_BASE_URL: "{{ LICENSE_MANAGER_DISCOVERY_BASE_URL }}"
+  LMS_BASE_URL: "{{ LICENSE_MANAGER_LMS_BASE_URL }}"
+  CORS_ORIGIN_WHITELIST: "{{ LICENSE_MANAGER_CORS_ORIGIN_WHITELIST }}"
+  CSRF_TRUSTED_ORIGINS: "{{ LICENSE_MANAGER_CSRF_TRUSTED_ORIGINS }}"
+  CSRF_COOKIE_SECURE: "{{ LICENSE_MANAGER_CSRF_COOKIE_SECURE }}"
+  CELERY_ALWAYS_EAGER: '{{ LICENSE_MANAGER_CELERY_ALWAYS_EAGER }}'
+  CELERY_TASK_ALWAYS_EAGER: '{{ LICENSE_MANAGER_CELERY_ALWAYS_EAGER }}'
+  CELERY_BROKER_TRANSPORT: '{{ LICENSE_MANAGER_CELERY_BROKER_TRANSPORT }}'
+  CELERY_BROKER_USER: '{{ LICENSE_MANAGER_CELERY_BROKER_USER }}'
+  CELERY_BROKER_PASSWORD: '{{ LICENSE_MANAGER_CELERY_BROKER_PASSWORD }}'
+  CELERY_BROKER_HOSTNAME: '{{ LICENSE_MANAGER_CELERY_BROKER_HOSTNAME }}'
+  CELERY_BROKER_VHOST: '{{ LICENSE_MANAGER_CELERY_BROKER_VHOST }}'
+  CELERY_DEFAULT_EXCHANGE: 'license_manager'
+  CELERY_DEFAULT_ROUTING_KEY: 'license_manager'
+  CELERY_DEFAULT_QUEUE: '{{ license_manager_celery_default_queue }}'
+  #
+  # customized variables
+  #
+  LMS_URL: "{{ LICENSE_MANAGER_LMS_BASE_URL }}"
+  ENTERPRISE_LEARNER_PORTAL_BASE_URL: "{{ DOJO_ENTERPRISE_LEARNER_PORTAL_URL }}"
+  ENTERPRISE_CATALOG_URL: "{{ ENTERPRISE_CATALOG_URL_ROOT }}"
+  EMAIL_BACKEND: "{{ COMMON_EMAIL_BACKEND }}"
+  EMAIL_HOST: "{{ COMMON_EMAIL_HOST }}"
+  EMAIL_HOST_USER: "{{ COMMON_EMAIL_HOST_USER }}"
+  EMAIL_HOST_PASSWORD: "{{ COMMON_EMAIL_HOST_PASSWORD }}"
+  EMAIL_USE_TLS: "{{ COMMON_EMAIL_USE_TLS }}"
+  EMAIL_PORT: 587
+  SUBSCRIPTIONS_FROM_EMAIL: "{{ COMMON_DEFAULT_FROM_EMAIL }}"
+  SENTRY_DSN: "{{ COMMON_SENTRY_DSN }}"
+  SENTRY_ENVIRONMENT: "{{ COMMON_ENVIRONMENT }}-license-manager"
+  SENTRY_RELEASE: "{{ COMMON_SENTRY_RELEASE }}"
+
+_EDXAPP_SYSTEM_WIDE_ROLE_CLASSES:
+  - 'system_wide_roles.SystemWideRoleAssignment'
+  - 'enterprise.SystemWideEnterpriseUserRoleAssignment'
+EDXAPP_SYSTEM_WIDE_ROLE_CLASSES: "{{ _EDXAPP_SYSTEM_WIDE_ROLE_CLASSES if ENTERPRISE_ENABLED else [] }}"
+
+# END edX Enterprise components
+
+# edX Programs components
+
+PROGRAMS_ENABLED: True
+
+EDXAPP_COURSE_CATALOG_API_URL: "{{ DISCOVERY_URL_ROOT }}/api/v1"
+
+DISCOVERY_VERSION: '{{ COMMON_OPENEDX_RELEASE_VERSION }}'
+
+DISCOVERY_DOMAIN: "discovery.{{ COMMON_DOMAIN_NAME }}"
+DISCOVERY_URL_ROOT: "{{ EDXAPP_LMS_BASE_SCHEME }}://{{ DISCOVERY_DOMAIN }}"
+
+DISCOVERY_ELASTICSEARCH_URL: "{{ ELASTICSEARCH_HOST }}:{{ ELASTICSEARCH_PORT }}/"
+
+DISCOVERY_MEMCACHE: "{{ EDXAPP_MEMCACHE }}"
+
+DISCOVERY_LANGUAGE_CODE: "en"
+
+DISCOVERY_PLATFORM_NAME: "{{ EDXAPP_PLATFORM_NAME }}"
+
+DISCOVERY_EMAIL_BACKEND: "{{ EDXAPP_EMAIL_BACKEND }}"
+DISCOVERY_EMAIL_HOST: "{{ EDXAPP_EMAIL_HOST }}"
+DISCOVERY_EMAIL_PORT: 587
+DISCOVERY_EMAIL_USE_TLS: "{{ EDXAPP_EMAIL_USE_TLS }}"
+DISCOVERY_EMAIL_HOST_USER: "{{ EDXAPP_EMAIL_HOST_USER }}"
+DISCOVERY_EMAIL_HOST_PASSWORD: "{{ EDXAPP_EMAIL_HOST_PASSWORD }}"
+DISCOVERY_PUBLISHER_FROM_EMAIL: "{{ EDXAPP_DEFAULT_FROM_EMAIL }}"
+
+DISCOVERY_SECRET_KEY: "{{ EDXAPP_EDXAPP_SECRET_KEY }}"
+
+DISCOVERY_MYSQL: "{{ EDXAPP_MYSQL_HOST }}"
+DISCOVERY_MYSQL_REPLICA_HOST: "{{ DISCOVERY_MYSQL }}"
+DISCOVERY_CELERY_BROKER_URL: "redis://{{ EDXAPP_REDIS_HOSTNAME }}:6379/"
+
+DISCOVERY_POST_MIGRATE_COMMANDS:
+  - command: >
+      ./manage.py create_or_update_partner
+      --code edx
+      --name LMS
+      --lms-url "{{ EDXAPP_LMS_ROOT_URL }}"
+      --courses-api-url {{ EDXAPP_LMS_ROOT_URL }}/api/courses/v1/
+      --organizations-api-url {{ EDXAPP_LMS_ROOT_URL }}/api/organizations/v0/
+      --site-id 1
+      --site-domain example.com
+      --settings={{ DISCOVERY_DJANGO_SETTINGS_MODULE }}
+    when: True
+
+discovery_service_config_overrides:
+  ELASTICSEARCH_URL: 'http://{{ DISCOVERY_ELASTICSEARCH_URL }}'
+  ELASTICSEARCH_CLUSTER_URL: '{{ DISCOVERY_ELASTICSEARCH_URL }}'
+  ELASTICSEARCH_INDEX_NAME: '{{ DISCOVERY_ELASTICSEARCH_INDEX_NAME }}'
+  PLATFORM_NAME: '{{ DISCOVERY_PLATFORM_NAME }}'
+  DEFAULT_PARTNER_ID: '{{ DISCOVERY_DEFAULT_PARTNER_ID }}'
+  EMAIL_BACKEND: '{{ DISCOVERY_EMAIL_BACKEND }}'
+  AWS_SES_REGION_NAME: '{{ DISCOVERY_AWS_SES_REGION_NAME }}'
+  AWS_SES_REGION_ENDPOINT: '{{ DISCOVERY_AWS_SES_REGION_ENDPOINT }}'
+  EMAIL_HOST: '{{ DISCOVERY_EMAIL_HOST }}'
+  EMAIL_PORT: 587
+  EMAIL_USE_TLS: '{{ DISCOVERY_EMAIL_USE_TLS }}'
+  EMAIL_HOST_USER: '{{ DISCOVERY_EMAIL_HOST_USER }}'
+  EMAIL_HOST_PASSWORD: '{{ DISCOVERY_EMAIL_HOST_PASSWORD }}'
+  ENABLE_PUBLISHER:  '{{ DISCOVERY_ENABLE_PUBLISHER }}'
+  PUBLISHER_FROM_EMAIL: '{{ DISCOVERY_PUBLISHER_FROM_EMAIL }}'
+  OPENEXCHANGERATES_API_KEY: '{{ DISCOVERY_OPENEXCHANGERATES_API_KEY }}'
+  LANGUAGE_CODE: '{{DISCOVERY_LANGUAGE_CODE}}'
+  PARLER_DEFAULT_LANGUAGE_CODE: '{{DISCOVERY_PARLER_DEFAULT_LANGUAGE_CODE}}'
+  PARLER_LANGUAGES : '{{DISCOVERY_PARLER_LANGUAGES}}'
+  CSRF_COOKIE_SECURE: true
+  CSRF_TRUSTED_ORIGINS: '{{ EDXAPP_CSRF_TRUSTED_ORIGINS }}'
+  CORS_ORIGIN_ALLOW_ALL: false
+  CORS_ORIGIN_WHITELIST: "{{ EDXAPP_CORS_ORIGIN_WHITELIST }}"
+  USERNAME_REPLACEMENT_WORKER: "{{ DISCOVERY_USERNAME_REPLACEMENT_WORKER }}"
+  CELERY_BROKER_URL: "{{ DISCOVERY_CELERY_BROKER_URL }}"
+  MEDIA_STORAGE_BACKEND:
+    DEFAULT_FILE_STORAGE: "{{ EDXAPP_DEFAULT_FILE_STORAGE }}"
+    MEDIA_ROOT: /discovery/media
+    MEDIA_URL: /discovery/media/
+  AWS_ACCESS_KEY_ID: "{{ EDXAPP_AWS_ACCESS_KEY_ID }}"
+  AWS_SECRET_ACCESS_KEY: "{{ EDXAPP_AWS_SECRET_ACCESS_KEY }}"
+  AWS_DEFAULT_ACL: 'private'
+  AWS_QUERYSTRING_AUTH: False
+  AWS_S3_CUSTOM_DOMAIN: "{{ EDXAPP_AWS_S3_CUSTOM_DOMAIN }}"
+  AWS_S3_REGION_NAME: "{{ AWS_S3_REGION_NAME }}"
+  AWS_STORAGE_BUCKET_NAME: "{{ EDXAPP_AWS_STORAGE_BUCKET_NAME }}"
+  SENTRY_DSN: "{{ COMMON_SENTRY_DSN }}"
+  SENTRY_ENVIRONMENT: "{{ COMMON_ENVIRONMENT }}-discovery"
+  SENTRY_RELEASE: "{{ COMMON_SENTRY_RELEASE }}"
+
+DISCOVERY_EXTRA_REQUIREMENTS:
+  - name: "sentry-sdk"
+    version: "{{ SENTRY_SDK_VERSION }}"
+    extra_args: "--no-deps"
+
+# END edX Programs components
+
+# https://github.com/strata-kk/lti-producer
+
+MUX_LTI_PRODUCER_ENABLED: True
+
+MUX_LTI_PRODUCER_DOMAIN: "lti-producer.{{ COMMON_DOMAIN_NAME }}"
+MUX_LTI_PRODUCER_URL: "{{ EDXAPP_LMS_BASE_SCHEME }}://{{ MUX_LTI_PRODUCER_DOMAIN }}"
+
+MUX_LTI_PRODUCER_REPO:
+  - PROTOCOL: https
+    DOMAIN: github.com
+    PATH: strata-kk
+    REPO: lti-producer
+    VERSION: "{{ COMMON_DOJO_REPO_VERSION }}"
+    DESTINATION: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}/lti-producer"
+    SSH_KEY: !!null
+
+MUX_LTI_PRODUCER_USER: lti-producer
+MUX_LTI_PRODUCER_MEDIA_ROOT: lti-producer/media
+MUX_LTI_PRODUCER_MEDIA_URL: /media/
+
+MUX_LTI_PRODUCER_CONFIG:
+  SITE_NAME: "{{ MUX_LTI_PRODUCER_DOMAIN }}"
+  AWS_ACCESS_KEY_ID: "{{ EDXAPP_AWS_ACCESS_KEY_ID }}"
+  AWS_SECRET_ACCESS_KEY: "{{ EDXAPP_AWS_SECRET_ACCESS_KEY }}"
+  AWS_DEFAULT_ACL: 'private'
+  AWS_QUERYSTRING_AUTH: False
+  AWS_S3_CUSTOM_DOMAIN: "{{ EDXAPP_AWS_S3_CUSTOM_DOMAIN }}"
+  AWS_S3_REGION_NAME: "{{ AWS_S3_REGION_NAME }}"
+  AWS_STORAGE_BUCKET_NAME: "{{ EDXAPP_AWS_STORAGE_BUCKET_NAME }}"
+  DEFAULT_FILE_STORAGE: "{{ EDXAPP_DEFAULT_FILE_STORAGE }}"
+  DISABLE_CLICKJACKING_MIDDLEWARE: True
+  ALLOWED_HOSTS:
+    - "{{ MUX_LTI_PRODUCER_DOMAIN }}"
+  CSRF_COOKIE_SECURE: true
+  CSRF_TRUSTED_ORIGINS:
+    - "{{ EDXAPP_LMS_ROOT_URL }}"
+    - "{{ DOJO_ENTERPRISE_LEARNER_PORTAL_URL }}"
+    - "{{ EDXAPP_LEARNING_MICROFRONTEND_URL }}"
+  CORS_ORIGIN_ALLOW_ALL: false
+  CORS_ORIGIN_WHITELIST:
+    - "{{ EDXAPP_LMS_ROOT_URL }}"
+    - "{{ EDXAPP_LEARNING_MICROFRONTEND_URL }}"
+    - "{{ DOJO_ENTERPRISE_LEARNER_PORTAL_URL }}"
+  DATABASES:
+    default:
+      ENGINE: django.db.backends.mysql
+      NAME: "{{ MUX_LTI_PRODUCER_DEFAULT_DB_NAME }}"
+      USER: "{{ MUX_LTI_PRODUCER_MYSQL_USER }}"
+      PASSWORD: "{{ MUX_LTI_PRODUCER_MYSQL_PASSWORD }}"
+      HOST: "{{ EDXAPP_MYSQL_HOST }}"
+      PORT: 3306
+      ATOMIC_REQUESTS: "false"
+      OPTIONS:
+        connect_timeout: 10
+        init_command: "SET sql_mode='STRICT_TRANS_TABLES'"
+  CACHES:
+    default:
+      BACKEND: django.core.cache.backends.memcached.MemcachedCache
+      KEY_PREFIX: lti-producer-default
+      LOCATION:
+        - "{{ MEMCACHE_ENDPOINT }}:11211"
+    lti_replay:
+      BACKEND: django.core.cache.backends.memcached.MemcachedCache
+      KEY_PREFIX: lti-producer-replay
+      LOCATION:
+        - "{{ MEMCACHE_ENDPOINT }}:11211"
+    lti_apps:
+      BACKEND: django.core.cache.backends.memcached.MemcachedCache
+      KEY_PREFIX: lti-producer-apps
+      LOCATION:
+        - "{{ MEMCACHE_ENDPOINT }}:11211"
+  HUEY:
+    huey_class: huey.RedisHuey
+    url: "redis://{{ EDXAPP_REDIS_HOSTNAME }}:6379"
+    immediate: false
+  LANGUAGE_CODE: en-us
+  SECRET_KEY: "{{ MUX_LTI_PRODUCER_SECRET_KEY }}"
+  STATICFILES_STORAGE: django.contrib.staticfiles.storage.StaticFilesStorage
+  STATIC_ROOT: "{{ COMMON_DATA_DIR }}/{{ MUX_LTI_PRODUCER_USER }}/staticfiles"
+  MEDIA_STORAGE_BACKEND:
+    DEFAULT_FILE_STORAGE: "{{ EDXAPP_DEFAULT_FILE_STORAGE }}"
+    MEDIA_ROOT: "{{ MUX_LTI_PRODUCER_MEDIA_ROOT }}"
+    MEDIA_URL: "{{ MUX_LTI_PRODUCER_MEDIA_URL }}"
+  TIME_ZONE: 'UTC'
+  MUX_TOKEN_ID: "{{ MUX_LTI_PRODUCER_MUX_TOKEN_ID }}"
+  MUX_TOKEN_SECRET: "{{ MUX_LTI_PRODUCER_MUX_TOKEN_SECRET }}"
+  MUX_SIGNING_KEY_ID: "{{ MUX_LTI_PRODUCER_MUX_SIGNING_KEY_ID }}"
+  MUX_SIGNING_PRIVATE_KEY: "{{ MUX_LTI_PRODUCER_MUX_SIGNING_PRIVATE_KEY }}"
+  SENTRY_DSN: "{{ COMMON_SENTRY_DSN }}"
+  SENTRY_ENVIRONMENT: "{{ COMMON_ENVIRONMENT }}-lti-producer"
+  SENTRY_RELEASE: "{{ COMMON_SENTRY_RELEASE }}"
+
+MUX_LTI_PRODUCER_MUX_PRODUCER_MODULE:
+  - name: git+https://github.com/strata-kk/mux-videos-lti-producer#egg=mux-lti-producer
+    extra_args: -e
+
+# END https://github.com/strata-kk/lti-producer

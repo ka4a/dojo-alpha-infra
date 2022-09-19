@@ -1,0 +1,225 @@
+---
+
+- name: install edx_service for lti-producer
+  include_role:
+    name: edx_service
+  vars:
+    edx_service_name: "{{ MUX_LTI_PRODUCER_USER }}"
+    edx_service_config: "{{ edx_django_service_config_default|combine(MUX_LTI_PRODUCER_CONFIG) }}"
+    edx_service_repos: "{{ MUX_LTI_PRODUCER_REPO }}"
+    edx_service_user: "{{ MUX_LTI_PRODUCER_USER }}"
+    edx_service_home: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}"
+    edx_service_use_python38: True
+
+- name: add gunicorn configuration file
+  template:
+    src: "roles/edx_django_service/templates/edx/app/app/app_gunicorn.py.j2"
+    dest: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}/{{ MUX_LTI_PRODUCER_USER }}_gunicorn.py"
+  vars:
+    edx_django_service_name: "{{ MUX_LTI_PRODUCER_USER }}"
+    edx_django_service_home: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}"
+    edx_django_service_gunicorn_port: 9630
+    edx_django_service_gunicorn_max_requests: 500
+    edx_django_service_gunicorn_extra_conf: "max_requests_jitter = 100"
+  become_user: "{{ MUX_LTI_PRODUCER_USER }}"
+
+- name: pin pip to a specific version.
+  command: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}/venvs/{{ MUX_LTI_PRODUCER_USER }}/bin/pip install pip=={{ COMMON_PIP_VERSION }}"
+  become_user: "{{ MUX_LTI_PRODUCER_USER }}"
+
+- name: install production requirements
+  command: make production-requirements
+  args:
+    chdir: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}/{{ MUX_LTI_PRODUCER_USER }}"
+  become_user: "{{ MUX_LTI_PRODUCER_USER }}"
+  environment:
+    DJANGO_SETTINGS_MODULE: settings.private
+    PATH: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}/venvs/{{ MUX_LTI_PRODUCER_USER }}/bin:{{ ansible_env.PATH }}"
+    MUX_CONFIG: /edx/etc/lti-producer.yml
+
+- name: install extra requirements
+  pip:
+    name: "{{ item.name }}"
+    version: "{{ item.version|default(omit) }}"
+    extra_args: "--exists-action w {{ item.extra_args|default('') }}"
+    virtualenv: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}/venvs/{{ MUX_LTI_PRODUCER_USER }}"
+    state: present
+  with_items:
+    - "{{ edx_django_service_extra_requirements }}"
+    - "{{ MUX_LTI_PRODUCER_MUX_PRODUCER_MODULE }}"
+  become_user: "{{ MUX_LTI_PRODUCER_USER }}"
+
+- name: deploy settings/private.py
+  copy:
+    content: |
+      from .prod import *
+      INSTALLED_APPS.append('muxltiproducer')
+      LTI_PRODUCER_URLS = {
+        "mux": "muxltiproducer.urls",
+      }
+      LTI_LAUNCH_VIEWS = {
+        "mux": "mux:launch",
+      }
+      MUX_ENABLE_SIGNED_PLAYBACK = ENV.get('MUX_ENABLE_SIGNED_PLAYBACK')
+      MUX_TOKEN_ID = ENV.get('MUX_TOKEN_ID')
+      MUX_TOKEN_SECRET = ENV.get('MUX_TOKEN_SECRET')
+      MUX_SIGNING_KEY_ID = ENV.get('MUX_SIGNING_KEY_ID')
+      MUX_SIGNING_PRIVATE_KEY = ENV.get('MUX_SIGNING_PRIVATE_KEY')
+      if MUX_ENABLE_SIGNED_PLAYBACK and not MUX_SIGNING_KEY_ID:
+          raise NameError(
+              "MUX_ENABLE_SIGNED_PLAYBACK enabled but MUX_SIGNING_KEY_ID settings was not declared in configuration"
+          )
+      if MUX_ENABLE_SIGNED_PLAYBACK and not MUX_SIGNING_PRIVATE_KEY:
+          raise NameError(
+              "MUX_ENABLE_SIGNED_PLAYBACK enabled but MUX_SIGNING_PRIVATE_KEY settings does not declared in configuration"
+          )
+    dest: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}/{{ MUX_LTI_PRODUCER_USER }}/standalone/producer/settings/private.py"
+    mode: 0554
+    owner: "{{ MUX_LTI_PRODUCER_USER }}"
+    group: "{{ common_web_user }}"
+
+- name: migrate database
+  command: "make migrate"
+  args:
+    chdir: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}/{{ MUX_LTI_PRODUCER_USER }}"
+  become_user: "{{ MUX_LTI_PRODUCER_USER }}"
+  environment:
+    DJANGO_SETTINGS_MODULE: settings.private
+    PATH: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}/venvs/{{ MUX_LTI_PRODUCER_USER }}/bin:{{ ansible_env.PATH }}"
+    MUX_CONFIG: /edx/etc/lti-producer.yml
+  run_once: yes
+
+- name: write out the supervisor wrapper
+  template:
+    src: "roles/edx_django_service/templates/edx/app/app/app.sh.j2"
+    dest: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}/{{ MUX_LTI_PRODUCER_USER }}.sh"
+    mode: 0650
+    owner: "{{ supervisor_user }}"
+    group: "{{ common_web_user }}"
+  vars:
+    edx_django_service_name: "{{ MUX_LTI_PRODUCER_USER }}"
+    edx_django_service_home: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}"
+    edx_django_service_wsgi_name: "standalone.producer"
+
+- name: write supervisord config
+  template:
+    src: "roles/edx_django_service/templates/edx/app/supervisor/conf.d.available/app.conf.j2"
+    dest: "{{ supervisor_available_dir }}/{{ MUX_LTI_PRODUCER_USER }}.conf"
+    owner: "{{ supervisor_user }}"
+    group: "{{ common_web_user }}"
+    mode: 0644
+  register: mux_supervisor_conf
+  vars:
+    edx_django_service_name: "{{ MUX_LTI_PRODUCER_USER }}"
+    edx_django_service_home: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}"
+
+- name: setup the app env file
+  template:
+    src: "roles/edx_django_service/templates/edx/app/app/app_env.j2"
+    dest: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}/{{ MUX_LTI_PRODUCER_USER }}_env"
+    owner: "{{ MUX_LTI_PRODUCER_USER }}"
+    group: "{{ MUX_LTI_PRODUCER_USER }}"
+    mode: 0644
+  vars:
+    edx_django_service_environment:
+      DJANGO_SETTINGS_MODULE: settings.private
+      PATH: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}/venvs/{{ MUX_LTI_PRODUCER_USER }}/bin:{{ ansible_env.PATH }}"
+      MUX_CONFIG: /edx/etc/lti-producer.yml
+
+- name: enable supervisor script
+  file:
+    src: "{{ supervisor_available_dir }}/{{ MUX_LTI_PRODUCER_USER }}.conf"
+    dest: "{{ supervisor_cfg_dir }}/{{ MUX_LTI_PRODUCER_USER }}.conf"
+    state: link
+    force: yes
+
+- name: update supervisor configuration
+  command: "{{ supervisor_ctl }} -c {{ supervisor_cfg }} update"
+  when: mux_supervisor_conf is changed
+
+- name: compile static assets
+  command: "make static"
+  args:
+    chdir: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}/{{ MUX_LTI_PRODUCER_USER }}"
+  become_user: "{{ MUX_LTI_PRODUCER_USER }}"
+  environment:
+    DJANGO_SETTINGS_MODULE: settings.private
+    PATH: "{{ COMMON_APP_DIR }}/{{ MUX_LTI_PRODUCER_USER }}/venvs/{{ MUX_LTI_PRODUCER_USER }}/bin:{{ ansible_env.PATH }}"
+    MUX_CONFIG: /edx/etc/lti-producer.yml
+
+- name: restart the application
+  supervisorctl:
+    state: restarted
+    supervisorctl_path: "{{ supervisor_ctl }}"
+    config: "{{ supervisor_cfg }}"
+    name: "{{ MUX_LTI_PRODUCER_USER }}"
+  become_user: "{{ supervisor_service_user }}"
+
+- name: copying nginx configs for the service
+  template:
+    src: "roles/edx_django_service/templates/edx/app/nginx/sites-available/app.j2"
+    dest: "{{ nginx_sites_available_dir }}/{{ MUX_LTI_PRODUCER_USER }}"
+    owner: root
+    group: "{{ common_web_user }}"
+    mode: 0640
+  vars:
+    edx_django_service_name: "{{ MUX_LTI_PRODUCER_USER }}"
+    edx_django_service_hostname: "{{ MUX_LTI_PRODUCER_USER }}"
+    edx_django_service_gunicorn_port: 9630
+    edx_django_service_nginx_port: 19630
+  when: nginx_sites_available_dir is defined
+
+- name: creating nginx config links for the service
+  file:
+    src: "{{ nginx_sites_available_dir }}/{{ MUX_LTI_PRODUCER_USER }}"
+    dest: "{{ nginx_sites_enabled_dir }}/{{ MUX_LTI_PRODUCER_USER }}"
+    state: link
+    owner: root
+    group: root
+  when: nginx_sites_available_dir is defined
+
+- name: restart nginx
+  shell: "nginx -t && systemctl restart nginx"
+
+- name: create lti-producer media dir
+  file:
+    path: "{{ MUX_LTI_PRODUCER_MEDIA_ROOT }}"
+    owner: "{{ MUX_LTI_PRODUCER_USER }}"
+    group: "{{ common_web_group }}"
+    state: directory
+    mode: 0775
+  when: MUX_LTI_PRODUCER_MEDIA_ROOT.startswith('/')
+
+- name: create cron tasks for lti-producer
+  cron:
+    name: "LTI Producer mux_sync"
+    job: ". ~lti-producer/lti-producer_env ; sudo -Eu www-data ~lti-producer/venvs/lti-producer/bin/python -W ignore ~lti-producer/lti-producer/manage.py mux_sync > /edx/var/log/lti-producer/edx.log 2>&1"
+    minute: "*/6"
+
+- name: create lti-producer users
+  expect:
+    command: >
+      bash -c ". ~lti-producer/lti-producer_env ; ~lti-producer/venvs/lti-producer/bin/python -W ignore ./standalone/producer/manage.py
+      createsuperuser --username {{ item.username }} --email {{ item.email }}"
+    responses:
+      "Password": "{{ item.password }}"
+    timeout: 30
+    chdir: "~lti-producer/lti-producer"
+  when: item.is_superuser
+  with_items: "{{ EDX_USERS }}"
+  become: True
+  become_user: "{{ MUX_LTI_PRODUCER_USER }}"
+  ignore_errors: true # skiping "That username is already taken" error
+
+- name: setting password for lti-producer user {{ item.username }}
+  expect:
+    command: >
+      bash -c ". ~lti-producer/lti-producer_env ; ~lti-producer/venvs/lti-producer/bin/python -W ignore ./standalone/producer/manage.py
+      changepassword {{ item.username }}"
+    responses:
+      "Password": "{{ item.password }}"
+    timeout: 30
+    chdir: "~lti-producer/lti-producer"
+  with_items: "{{ EDX_USERS }}"
+  become: True
+  become_user: "{{ MUX_LTI_PRODUCER_USER }}"

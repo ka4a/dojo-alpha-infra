@@ -1,0 +1,7 @@
+---
+
+# Deployment variables from 'config_common.yml' can be overrided in this file for EXP environment
+
+EMPTY: '' # keep it here to omit ansible errors about empty extra-vars file
+
+COMMON_DEFAULT_FROM_EMAIL: 'exp-no-reply@dojoalpha.com'

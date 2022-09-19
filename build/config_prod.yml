@@ -1,0 +1,52 @@
+---
+
+# Deployment variables from 'config_common.yml' can be overrided in this file for PROD environment
+
+COMMON_DOMAIN_NAME: "dojoalpha.com"
+
+# reduce number of gunicorn DJango workers to save costs
+# remove or increase for Production
+worker_core_mult:
+  lms: 2
+  cms: 1
+# memory leaks protection
+# increase for Production
+EDXAPP_LMS_MAX_REQ: 2000
+EDXAPP_CMS_MAX_REQ: 500
+EDXAPP_LMS_GUNICORN_EXTRA_CONF: "max_requests_jitter = 200"
+EDXAPP_CMS_GUNICORN_EXTRA_CONF: "max_requests_jitter = 50"
+
+EDXAPP_CELERY_WORKERS:
+  - queue: default
+    service_variant: cms
+    concurrency: 2
+    monitor: True
+    prefetch_optimization: default
+  - queue: high
+    service_variant: cms
+    concurrency: 2
+    monitor: True
+    prefetch_optimization: default
+  - queue: default
+    service_variant: lms
+    concurrency: 2
+    monitor: True
+    prefetch_optimization: default
+  - queue: high
+    service_variant: lms
+    concurrency: 2
+    monitor: True
+    prefetch_optimization: default
+  - queue: high_mem
+    service_variant: lms
+    concurrency: 1
+    monitor: False
+    max_tasks_per_child: 1
+    prefetch_optimization: default
+
+# do not use on autoscaling instances
+# instead tune "worker_core_mult" to match workers memory consumption
+# and instance available memory
+SWAPFILE_SIZE: 16GB
+
+NGINX_ROBOT_RULES: []

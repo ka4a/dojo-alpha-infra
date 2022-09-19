@@ -1,0 +1,121 @@
+diff --git a/playbooks/roles/git_clone/tasks/main.yml b/playbooks/roles/git_clone/tasks/main.yml
+index 09d3bf32d..b6817b962 100644
+--- a/playbooks/roles/git_clone/tasks/main.yml
++++ b/playbooks/roles/git_clone/tasks/main.yml
+@@ -56,6 +56,7 @@
+ 
+ - name: Check that working tree is clean
+   shell: test ! -e "{{ item }}" || git -C "{{ item }}" status --porcelain --untracked-files=no
++  become_user: "{{ repo_owner }}"
+   register: dirty_files
+   # Using the map here means that the items will only be the DESTINATION strings,
+   # rather than the full GIT_REPOS structures, which have data we don't want to log,
+@@ -113,9 +114,10 @@
+ 
+ - name: Run git clean after checking out code
+   shell: cd {{ item.DESTINATION }} && git clean -xdf
+-  become: true
++  become_user: "{{ repo_owner }}"
+   with_items: "{{ GIT_REPOS }}"
+   no_log: "{{ GIT_CLONE_NO_LOGGING }}"
++  when: GIT_CLONE_CLEAR | default(True)
+   tags:
+     - install
+     - install:code
+diff --git a/playbooks/roles/mfe/meta/main.yml b/playbooks/roles/mfe/meta/main.yml
+index 7f566a088..ce12c85a6 100644
+--- a/playbooks/roles/mfe/meta/main.yml
++++ b/playbooks/roles/mfe/meta/main.yml
+@@ -10,5 +10,6 @@ dependencies:
+     repo_group: "{{ common_web_group }}"
+     GIT_REPOS: "{{ MFE_REPOS }}"
+     git_home: "{{ MFE_HOME }}"
++    GIT_CLONE_CLEAR: False
+     when: MFE_REPOS is defined
+
+diff --git a/playbooks/roles/mfe/tasks/main.yml b/playbooks/roles/mfe/tasks/main.yml
+index 3dc4d63b4..1e0320588 100644
+--- a/playbooks/roles/mfe/tasks/main.yml
++++ b/playbooks/roles/mfe/tasks/main.yml
+@@ -66,20 +66,41 @@
+     - install
+     - install:system-requirements
+ 
++- name: skip build if there are no changes in repository
++  shell: |
++    STATE=`(git rev-parse HEAD ; echo "{{ MFE_ENVIRONMENT }}") | md5sum | cut -f 1 -d ' '`
++    if test x${STATE} = x`cat {{ MFE_HOME }}/.latest_commit` -a -d dist ; then
++      echo up-to-date
++    else
++      echo update-required
++    fi
++  args:
++    chdir: "{{ MFE_CODE_DIR }}"
++  become_user: "{{ MFE_USER }}"
++  register: mfe_repo_status
++  changed_when: mfe_repo_status.stdout is defined and mfe_repo_status.stdout != "up-to-date"
++  tags:
++    - install
++    - install:base
++    - install:app-requirements
++    - install:system-requirements
++
+ - name: upgrade npm
+   command: "npm install -g npm@{{ MFE_NPM_VERSION }}"
+   become_user: "{{ MFE_USER }}"
+   environment: "{{ MFE_ENVIRONMENT }}"
++  when: mfe_repo_status is changed
+   tags:
+     - install
+     - install:system-requirements
+ 
+ - name: install npm dependencies
+-  shell: "npm install --dev --no-save"
++  shell: "npm install --dev --no-save --prefer-offline --no-audit --progress=false"
+   args:
+     chdir: "{{ MFE_CODE_DIR }}"
+   become_user: "{{ MFE_USER }}"
+   environment: "{{ MFE_ENVIRONMENT }}"
++  when: mfe_repo_status is changed
+   tags:
+     - install
+     - install:app-requirements
+@@ -91,6 +112,7 @@
+   become_user: "{{ MFE_USER }}"
+   environment: "{{ MFE_ENVIRONMENT }}"
+   with_items: "{{ MFE_NPM_OVERRIDES }}"
++  when: mfe_repo_status is changed
+   tags:
+     - install
+     - install:app-requirements
+@@ -101,9 +123,30 @@
+     chdir: "{{ MFE_CODE_DIR }}"
+   become_user: "{{ MFE_USER }}"
+   environment: "{{ MFE_ENVIRONMENT }}"
++  when: mfe_repo_status is changed
+   tags:
+     - install:base
+ 
++- name: fix state file permissions
++  file:
++    path: "{{ MFE_HOME }}/.latest_commit"
++    state: touch
++    owner: "{{ MFE_USER }}"
++    access_time: preserve
++    modification_time: preserve
++
++- name: save repository state to be able to skip build in the future
++  shell: >
++    echo -n `(git rev-parse HEAD ; echo "{{ MFE_ENVIRONMENT }}") | md5sum | cut -f 1 -d ' '` > {{ MFE_HOME }}/.latest_commit
++  args:
++    chdir: "{{ MFE_CODE_DIR }}"
++  become_user: "{{ MFE_USER }}"
++  when: mfe_repo_status is changed
++  tags:
++    - install
++    - install:base
++    - install:app-requirements
++    - install:system-requirements
+ 
+ - name: Copying nginx configs for the service
+   template:

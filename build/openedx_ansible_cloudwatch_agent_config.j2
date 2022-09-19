@@ -1,0 +1,102 @@
+{
+  "agent": {
+    "run_as_user": "syslog"
+  },
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "log_stream_name": "lms",
+            "file_path": "/edx/var/log/lms/edx.log",
+            "log_group_name": "openedx-logs-{{ lookup('env', 'ENVIRONMENT') | default('unknown_environment') }}",
+            "timestamp_format" : "%b %-d %H:%M:%S",
+            "multi_line_start_pattern": "{timestamp_format}"
+          },
+          {
+            "log_stream_name": "cms",
+            "file_path": "/edx/var/log/cms/edx.log",
+            "log_group_name": "openedx-logs-{{ lookup('env', 'ENVIRONMENT') | default('unknown_environment') }}",
+            "timestamp_format" : "%b %-d %H:%M:%S",
+            "multi_line_start_pattern": "{timestamp_format}"
+          },
+          {
+            "log_stream_name": "lms-workers",
+            "file_path": "/edx/var/log/supervisor/lms_*-stderr.log",
+            "log_group_name": "openedx-logs-{{ lookup('env', 'ENVIRONMENT') | default('unknown_environment') }}",
+            "timestamp_format" : "%Y-%m-%d %H:%M:%S,%f",
+            "multi_line_start_pattern": "{timestamp_format}"
+          },
+          {
+            "log_stream_name": "cms-workers",
+            "file_path": "/edx/var/log/supervisor/cms_*-stderr.log",
+            "log_group_name": "openedx-logs-{{ lookup('env', 'ENVIRONMENT') | default('unknown_environment') }}",
+            "timestamp_format" : "%Y-%m-%d %H:%M:%S,%f",
+            "multi_line_start_pattern": "{timestamp_format}"
+          },
+          {
+            "log_stream_name": "enterprise-catalog",
+            "file_path": "/edx/var/log/supervisor/enterprise_catalog-stderr.log",
+            "log_group_name": "openedx-logs-{{ lookup('env', 'ENVIRONMENT') | default('unknown_environment') }}",
+            "timestamp_format" : "%Y-%m-%d %H:%M:%S",
+            "multi_line_start_pattern": "{timestamp_format}"
+          },
+          {
+            "log_stream_name": "enterprise-license-manager",
+            "file_path": "/edx/var/log/supervisor/license_manager-*.log",
+            "log_group_name": "openedx-logs-{{ lookup('env', 'ENVIRONMENT') | default('unknown_environment') }}",
+            "timestamp_format" : "%Y-%m-%d %H:%M:%S",
+            "multi_line_start_pattern": "{timestamp_format}"
+          },
+          {
+            "log_stream_name": "discovery",
+            "file_path": "/edx/var/log/supervisor/discovery-*.log",
+            "log_group_name": "openedx-logs-{{ lookup('env', 'ENVIRONMENT') | default('unknown_environment') }}",
+            "timestamp_format" : "%Y-%m-%d %H:%M:%S",
+            "multi_line_start_pattern": "{timestamp_format}"
+          },
+          {
+            "log_stream_name": "forum",
+            "file_path": "/edx/var/log/supervisor/forum-stderr.log",
+            "log_group_name": "openedx-logs-{{ lookup('env', 'ENVIRONMENT') | default('unknown_environment') }}",
+            "timestamp_format" : "%Y-%m-%dT%H:%M:%S.%f",
+            "multi_line_start_pattern": "^([\\w]+, \\[|[\\d]+\\.[\\d]+\\.[\\d]+\\.[\\d]+ )"
+          },
+          {
+            "log_stream_name": "tracking",
+            "file_path": "/edx/var/log/tracking/tracking.log",
+            "log_group_name": "openedx-logs-{{ lookup('env', 'ENVIRONMENT') | default('unknown_environment') }}",
+            "timestamp_format" : "%Y-%m-%dT%H:%M:%S.%f",
+            "multi_line_start_pattern": "^{\"name\": "
+          },
+          {
+            "log_stream_name": "celerybeat",
+            "file_path": "/edx/var/log/supervisor/celerybeat-stderr.log",
+            "log_group_name": "openedx-logs-{{ lookup('env', 'ENVIRONMENT') | default('unknown_environment') }}",
+            "timestamp_format" : "%Y-%m-%d %H:%M:%S,%f",
+            "multi_line_start_pattern": "{timestamp_format}"
+          },
+          {
+            "log_stream_name": "cron-tasks",
+            "file_path": "/edx/var/log/cron_tasks/edx.log",
+            "log_group_name": "openedx-logs-{{ lookup('env', 'ENVIRONMENT') | default('unknown_environment') }}",
+            "timestamp_format" : "%Y-%m-%d %H:%M:%S,%f",
+            "multi_line_start_pattern": "{timestamp_format}"
+          },
+          {
+            "log_stream_name": "mux-lti-producer",
+            "file_path": "/edx/var/log/supervisor/lti-producer-*.log",
+            "log_group_name": "openedx-logs-{{ lookup('env', 'ENVIRONMENT') | default('unknown_environment') }}",
+            "timestamp_format" : "%Y-%m-%d %H:%M:%S",
+            "multi_line_start_pattern": "{timestamp_format}"
+          },
+          {
+            "log_stream_name": "mux-lti-producer",
+            "file_path": "/edx/var/log/lti-producer/edx.log",
+            "log_group_name": "openedx-logs-{{ lookup('env', 'ENVIRONMENT') | default('unknown_environment') }}"
+          }
+        ]
+      }
+    }
+  }
+}

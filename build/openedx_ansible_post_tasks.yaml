@@ -1,0 +1,466 @@
+---
+
+- name: create edX users
+  shell: ". {{ edxapp_app_dir}}/edxapp_env ; {{ edxapp_venv_bin }}/python {{ edxapp_code_dir }}/manage.py lms --settings={{ COMMON_EDXAPP_SETTINGS }} \
+           --service-variant lms manage_user {{ item.username }} {{ item.email }} \
+           --initial-password-hash 'pbkdf2_sha256$20000$TjE34FJjc3vv$0B7GUmH8RwrOc/BvMoxjb5j8EgnWTt3sxorDANeF7Qw=' \
+           {% if item.is_staff %} --staff{% endif %} \
+           {% if item.is_superuser %}--superuser{% endif %}"
+  with_items: "{{ EDX_USERS }}"
+  become: True
+  become_user: "{{ common_web_user }}"
+
+- name: setting password for {{ item.username }}
+  expect:
+    command: >
+      bash -c ". {{ edxapp_app_dir }}/edxapp_env && {{ edxapp_venv_bin }}/python -W ignore ./manage.py lms --settings={{ edxapp_settings }} --service-variant lms
+      changepassword {{ item.username }}"
+    responses:
+      "Password": "{{ item.password }}"
+    timeout: 30
+    chdir: "{{ edxapp_code_dir }}"
+  with_items: "{{ EDX_USERS }}"
+  become: True
+  become_user: "{{ edxapp_user }}"
+
+- name: create enterprise-catalog users
+  expect:
+    command: >
+      bash -c ". {{ enterprise_catalog_app_dir }}/enterprise_catalog_env ; {{ enterprise_catalog_venv_dir }}/bin/python {{ enterprise_catalog_code_dir }}/manage.py
+      createsuperuser --username {{ item.username }} --email {{ item.email }}"
+    responses:
+      "Password": "{{ item.password }}"
+    timeout: 30
+    chdir: "{{ enterprise_catalog_code_dir }}"
+  when: item.is_superuser and ENTERPRISE_ENABLED
+  with_items: "{{ EDX_USERS }}"
+  become: True
+  become_user: "{{ enterprise_catalog_user }}"
+  ignore_errors: true # skiping "That username is already taken" error
+  tags: [ "enterprise" ]
+
+- name: setting password for enterprise-catalog user {{ item.username }}
+  expect:
+    command: >
+      bash -c ". {{ enterprise_catalog_app_dir }}/enterprise_catalog_env && {{ enterprise_catalog_venv_dir }}/bin/python -W ignore ./manage.py changepassword {{ item.username }}"
+    responses:
+      "Password": "{{ item.password }}"
+    timeout: 30
+    chdir: "{{ enterprise_catalog_code_dir }}"
+  with_items: "{{ EDX_USERS }}"
+  become: True
+  become_user: "{{ enterprise_catalog_user }}"
+  when: ENTERPRISE_ENABLED
+  tags: [ "enterprise" ]
+
+- name: create discovery users
+  expect:
+    command: >
+      bash -c ". {{ discovery_home }}/discovery_env ; {{ discovery_home }}/venvs/discovery/bin/python -W ignore {{ discovery_code_dir }}/manage.py
+      createsuperuser --username {{ item.username }} --email {{ item.email }}"
+    responses:
+      "Password": "{{ item.password }}"
+    timeout: 30
+    chdir: "{{ discovery_code_dir }}"
+  when: item.is_superuser and PROGRAMS_ENABLED
+  with_items: "{{ EDX_USERS }}"
+  become: True
+  become_user: "{{ discovery_user }}"
+  ignore_errors: true # skiping "That username is already taken" error
+  tags: [ "programs", "discovery" ]
+
+- name: setting password for discovery user {{ item.username }}
+  expect:
+    command: >
+      bash -c ". {{ discovery_home }}/discovery_env ; {{ discovery_home }}/venvs/discovery/bin/python -W ignore {{ discovery_code_dir }}/manage.py
+      changepassword {{ item.username }}"
+    responses:
+      "Password": "{{ item.password }}"
+    timeout: 30
+    chdir: "{{ discovery_code_dir }}"
+  with_items: "{{ EDX_USERS }}"
+  become: True
+  become_user: "{{ discovery_user }}"
+  when: PROGRAMS_ENABLED
+  tags: [ "programs", "discovery" ]
+
+- name: patch discovery to get rid of hardcoded AWS_DEFAULT_ACL
+  lineinfile:
+    path: "{{ discovery_code_dir }}/course_discovery/settings/production.py"
+    regexp: "^AWS_DEFAULT_ACL(.*)$"
+    line: "# AWS_DEFAULT_ACL\\1"
+    backrefs: yes
+  when: PROGRAMS_ENABLED
+  tags: [ "programs", "discovery" ]
+
+- name: patch license_manager to get rid of hardcoded EMAIL_BACKEND
+  lineinfile:
+    path: "{{ license_manager_code_dir }}/license_manager/settings/production.py"
+    regexp: "^EMAIL_BACKEND(.*)$"
+    line: "# EMAIL_BACKEND\\1"
+    backrefs: yes
+  when: ENTERPRISE_ENABLED
+  tags: [ "enterprise", "license_manager" ]
+
+- name: create license_manager users
+  expect:
+    command: >
+      bash -c ". {{ license_manager_app_dir }}/license_manager_env ; {{ license_manager_venv_dir }}/bin/python {{ license_manager_code_dir }}/manage.py
+      createsuperuser --username {{ item.username }} --email {{ item.email }}"
+    responses:
+      "Password": "{{ item.password }}"
+    timeout: 30
+    chdir: "{{ license_manager_code_dir }}"
+  when: item.is_superuser and ENTERPRISE_ENABLED
+  with_items: "{{ EDX_USERS }}"
+  become: True
+  become_user: "{{ license_manager_user }}"
+  ignore_errors: true # skiping "That username is already taken" error
+  tags: [ "enterprise", "license_manager" ]
+
+- name: setting password for license_manager user {{ item.username }}
+  expect:
+    command: >
+      bash -c ". {{ license_manager_app_dir }}/license_manager_env && {{ license_manager_venv_dir }}/bin/python -W ignore ./manage.py changepassword {{ item.username }}"
+    responses:
+      "Password": "{{ item.password }}"
+    timeout: 30
+    chdir: "{{ license_manager_code_dir }}"
+  with_items: "{{ EDX_USERS }}"
+  become: True
+  become_user: "{{ license_manager_user }}"
+  when: ENTERPRISE_ENABLED
+  tags: [ "enterprise", "license_manager" ]
+
+- name: edxapp create_catalog_integrations
+  shell: ". {{ edxapp_app_dir }}/edxapp_env && {{ edxapp_venv_bin }}/python -W ignore {{ edxapp_code_dir }}/manage.py lms --settings={{ edxapp_settings }} --service-variant lms \
+      create_catalog_integrations \
+      --enabled \
+      --internal_api_url {{ EDXAPP_COURSE_CATALOG_API_URL }} \
+      --service_username {{ DISCOVERY_SERVICE_USER_NAME }} \
+      --cache_ttl 900 \
+      --long_term_cache_ttl 86400 \
+      --page_size 100"
+  become: True
+  become_user: "{{ common_web_user }}"
+
+- name: patch /edx/etc/enterprise-catalog.yml with Algolia config and celery fix
+  blockinfile:
+    path: /edx/etc/enterprise_catalog.yml
+    block: |
+      DISCOVERY_SERVICE_API_URL: "{{ DISCOVERY_URL_ROOT }}/api/v1/"
+      CELERY_TASK_ALWAYS_EAGER: true
+      ALGOLIA:
+        {{ ENTERPRISE_CATALOG_ALGOLIA | to_nice_yaml | indent(2) }}
+  when: ENTERPRISE_ENABLED
+  tags: [ "enterprise" ]
+
+- name: enable celery worker supervisor script for enterprise
+  file:
+    src: "{{ supervisor_available_dir }}/{{ item }}"
+    dest: "{{ supervisor_cfg_dir }}/{{ item }}"
+    state: "{{ 'link' if ENTERPRISE_ENABLED else 'absent' }}"
+    force: yes
+  become_user: "{{ supervisor_user }}"
+  with_items:
+    - "enterprise_catalog_worker.conf"
+    - "license_manager-workers.conf"
+  tags: [ "enterprise" ]
+
+- name: reread supervisor configuration
+  shell:  "{{ supervisor_ctl }} -c {{ supervisor_cfg }} reread"
+  register: supervisor_reread
+  become_user: "{{ supervisor_service_user }}"
+  changed_when: supervisor_reread.stdout is defined and supervisor_reread.stdout != "No config updates to processes"
+
+- name: update supervisor configuration
+  shell:  "{{ supervisor_ctl }} -c {{ supervisor_cfg }} update"
+  register: supervisor_update
+  become_user: "{{ supervisor_service_user }}"
+  changed_when: supervisor_update.stdout is defined and supervisor_update.stdout != ""
+  when: supervisor_reread is changed
+
+# https://github.com/edx/enterprise-catalog/blob/master/docs/getting_started.rst#migrating-catalog-data-from-lms-to-the-catalog-service
+- name: migrating Catalog Data from LMS to the Catalog Service
+  shell: >
+    . {{ edxapp_app_dir}}/edxapp_env ;
+    {{ edxapp_venv_bin }}/python {{ edxapp_code_dir }}/manage.py lms migrate_enterprise_catalogs --api_user enterprise_catalog_worker --settings={{ COMMON_EDXAPP_SETTINGS }}
+  become: True
+  become_user: "{{ common_web_user }}"
+  when: ENTERPRISE_ENABLED
+  tags: [ "enterprise" ]
+
+- name: set DJango waffle switches
+  shell: >
+    . {{ edxapp_app_dir}}/edxapp_env ;
+    {{ edxapp_venv_bin }}/python {{ edxapp_code_dir }}/manage.py lms --settings={{ COMMON_EDXAPP_SETTINGS }}
+    waffle_switch {{ item.key }} {{ item.value }} --create
+  become: True
+  become_user: "{{ common_web_user }}"
+  with_dict: "{{ EDXAPP_WAFFLE_SWITCHES | default({}) }}"
+
+- name: set DJango waffle flags
+  shell: >
+    . {{ edxapp_app_dir}}/edxapp_env ;
+    {{ edxapp_venv_bin }}/python {{ edxapp_code_dir }}/manage.py lms --settings={{ COMMON_EDXAPP_SETTINGS }}
+    waffle_flag {{ item.key }} {{ item.value }} --create
+  become: True
+  become_user: "{{ common_web_user }}"
+  with_dict: "{{ EDXAPP_WAFFLE_FLAGS | default({}) }}"
+
+- name: create persistentgradesenabledflag.json
+  copy:
+    dest: "/tmp/ansible_persistentgradesenabledflag.json"
+    content: |
+      {
+        "model": "grades.PersistentGradesEnabledFlag",
+        "data":
+          [
+            {
+              "enabled": true,
+              "enabled_for_all_courses": true
+            }
+          ]
+      }
+
+- name: manage persistentgradesenabledflag configurations
+  shell: >
+    . {{ edxapp_app_dir}}/edxapp_env ;
+    {{ edxapp_venv_bin }}/python {{ edxapp_code_dir }}/manage.py lms --settings={{ COMMON_EDXAPP_SETTINGS }}
+    populate_model -f /tmp/ansible_persistentgradesenabledflag.json -u edxstaff
+  register: command_result
+  changed_when: "'Import complete, 0 new entries created' not in command_result.stdout"
+  become: True
+  become_user: "{{ common_web_user }}"
+
+- name: remove persistentgradesenabledflag.json
+  file:
+    path: "/tmp/ansible_persistentgradesenabledflag.json"
+    state: absent
+
+- name: create programsapiconfig.json
+  copy:
+    dest: "/tmp/ansible_programsapiconfig.json"
+    content: |
+      {
+        "model": "programs.ProgramsApiConfig",
+        "data":
+          [
+            {
+              "enabled": true,
+              "marketing_path": ""
+            }
+          ]
+      }
+  when: PROGRAMS_ENABLED
+
+- name: manage programsapiconfig configurations
+  shell: >
+    . {{ edxapp_app_dir}}/edxapp_env ;
+    {{ edxapp_venv_bin }}/python {{ edxapp_code_dir }}/manage.py lms --settings={{ COMMON_EDXAPP_SETTINGS }}
+    populate_model -f /tmp/ansible_programsapiconfig.json -u edxstaff
+  register: command_result
+  changed_when: "'Import complete, 0 new entries created' not in command_result.stdout"
+  become: True
+  become_user: "{{ common_web_user }}"
+  when: PROGRAMS_ENABLED
+
+- name: remove programsapiconfig.json
+  file:
+    path: "/tmp/ansible_programsapiconfig.json"
+    state: absent
+  when: PROGRAMS_ENABLED
+
+- name: update default site configuration
+  shell: >
+    . {{ edxapp_app_dir}}/edxapp_env ;
+    {{ edxapp_venv_bin }}/python {{ edxapp_code_dir }}/manage.py lms --settings={{ COMMON_EDXAPP_SETTINGS }}
+    create_or_update_site_configuration
+    --site-id 1 --enabled --configuration '{{ EDXAPP_DEFAULT_SITE_CONFIG | to_json }}'
+  become: True
+  become_user: "{{ common_web_user }}"
+  when: EDXAPP_DEFAULT_SITE_CONFIG is defined
+
+- name: create directory /etc/nginx/include
+  file:
+    path: /etc/nginx/include
+    state: directory
+    owner: root
+    mode: 0700
+  when: NGINX_ENABLE_S3_PROXY
+  tags: [ "nginx" ]
+
+- name: deploy /etc/nginx/include/s3gateway.js
+  template:
+    dest: /etc/nginx/include/s3gateway.js
+    src: openedx_ansible_nginx_s3gateway_js.j2
+    owner: root
+    mode: 0600
+  when: NGINX_ENABLE_S3_PROXY
+  tags: [ "nginx" ]
+
+- name: deploy nginx frontend proxy config
+  template:
+    dest: /etc/nginx/sites-enabled/http-proxy
+    src: openedx_ansible_nginx_http_proxy.j2
+    owner: root
+    mode: 0644
+  tags: [ "nginx" ]
+
+- name: change nginx client_max_body_size for CMS
+  lineinfile:
+    path: "{{ nginx_sites_enabled_dir }}/cms"
+    regexp: "^( *)client_max_body_size .*$"
+    line: "\\1client_max_body_size {{ EDXAPP_MAX_ASSET_UPLOAD_FILE_SIZE_IN_MB | default('100') }}M;"
+    backrefs: yes
+  tags: [ "nginx" ]
+
+- name: restart nginx
+  shell: "nginx -t && systemctl restart nginx"
+  tags: [ "nginx" ]
+
+- name: add Sentry.io integration for known DJango services
+  blockinfile:
+    path: "{{ item }}"
+    marker: "# {mark} Strata customization - Sentry.io integration"
+    block: |
+      if 'SENTRY_DSN' in vars() and SENTRY_DSN != '':
+          import sentry_sdk
+          import subprocess
+          from sentry_sdk.integrations.django import DjangoIntegration
+          from sentry_sdk.integrations.celery import CeleryIntegration
+          sentry_sdk.init(
+                  SENTRY_DSN,
+                  auto_enabling_integrations=False,
+                  integrations=[DjangoIntegration(),CeleryIntegration()],
+                  environment=SENTRY_ENVIRONMENT if 'SENTRY_ENVIRONMENT' in vars() else 'unknown environment',
+                  release=SENTRY_RELEASE if 'SENTRY_RELEASE' in vars() else 'unknown release',
+                  send_default_pii=True,
+                  traces_sample_rate=0.1
+                  )
+  with_items:
+    - ~edxapp/edx-platform/lms/envs/production.py
+    - ~edxapp/edx-platform/cms/envs/production.py
+    - ~license_manager/license_manager/license_manager/settings/production.py
+    - ~enterprise_catalog/enterprise_catalog/enterprise_catalog/settings/production.py
+    - ~discovery/discovery/course_discovery/settings/production.py
+  tags: [ "sentry" ]
+
+- name: git apply edx-platform customization patches
+  shell: >
+    git -C {{ edxapp_code_dir }} -c user.name='OpenEdx provision script' -c user.email='deploy@strata.co.jp'
+    apply {{ item }}
+  become: True
+  become_user: "{{ edxapp_user }}"
+  with_items:
+    - "/edx/app/edx_ansible/edx_ansible/playbooks/openedx_ansible_contentstore_mongo_ROOT.patch"
+
+- name: compiling all py files in the edx-platform repo
+  shell: "{{ edxapp_venv_bin }}/python -m compileall -q -x '.git/.*|node_modules/.*' {{ edxapp_code_dir }}"
+  become_user: "{{ edxapp_user }}"
+
+- name: restart edxapp
+  supervisorctl:
+    name: "{{ item }}"
+    supervisorctl_path: "{{ supervisor_ctl }}"
+    config: "{{ supervisor_cfg }}"
+    state: restarted
+  become_user: "{{ supervisor_service_user }}"
+  when: item != ''
+  with_items:
+    - 'lms'
+    - 'cms'
+    - 'edxapp_worker:'
+    - "{{ 'license_manager' if ENTERPRISE_ENABLED else '' }}"
+    - "{{ 'license_manager_workers:' if ENTERPRISE_ENABLED else '' }}"
+    - "{{ 'enterprise_catalog' if ENTERPRISE_ENABLED else '' }}"
+    - "{{ 'enterprise_catalog_workers:' if ENTERPRISE_ENABLED else '' }}"
+  tags: [ "enterprise", "license_manager" ]
+
+- name: create /etc/rc.local
+  copy:
+    dest: /etc/rc.local
+    force: False
+    owner: root
+    group: root
+    mode: 0755
+    content: |
+      #!/bin/sh
+      #
+      # rc.local
+      #
+      # This script is executed at the end of each multiuser runlevel.
+      # Make sure that the script will "exit 0" on success or any other
+      # value on error.
+      #
+      # In order to enable or disable this script just change the execution
+      # bits.
+      #
+      # By default this script does nothing.
+
+- name: add onboot django warmup call to /etc/rc.local
+  blockinfile:
+    path: /etc/rc.local
+    block: |
+      curl http://127.0.0.1:8000/heartbeat 2>&1 | grep OK || sleep 5
+      curl http://127.0.0.1:8000/heartbeat 2>&1 | grep OK || sleep 10
+      curl http://127.0.0.1:8000/heartbeat 2>&1 | grep OK || sleep 15
+      curl http://127.0.0.1:8000/heartbeat > /dev/null 2>&1 || true
+
+- name: deploy openedx_ansible_cron_jobs.sh
+  template:
+    dest: /root/openedx_ansible_cron_jobs.sh
+    src: openedx_ansible_cron_jobs.sh
+    owner: root
+    mode: 0750
+  when: ENTERPRISE_ENABLED
+  tags: [ "enterprise" ]
+
+- name: add openedx_ansible_cron_jobs.sh script to cron
+  cron:
+    name: OpenEdx cron tasks to replace edX Jenkins
+    minute: "*/5"
+    hour: "*"
+    day: "*"
+    month: "*"
+    weekday: "*"
+    job: "/root/openedx_ansible_cron_jobs.sh"
+  when: ENTERPRISE_ENABLED
+  tags: [ "enterprise" ]
+
+- name: change /etc/ntp.conf to use AWS NTP server
+  copy:
+    dest: /etc/ntp.conf
+    owner: root
+    group: root
+    mode: 0755
+    content: |
+      driftfile /var/lib/ntp/ntp.drift
+      leapfile /usr/share/zoneinfo/leap-seconds.list
+      statistics loopstats peerstats clockstats
+      filegen loopstats file loopstats type day enable
+      filegen peerstats file peerstats type day enable
+      filegen clockstats file clockstats type day enable
+      server 169.254.169.123 prefer iburst
+      restrict -4 default kod notrap nomodify nopeer noquery limited
+      restrict -6 default kod notrap nomodify nopeer noquery limited
+      restrict 127.0.0.1
+      restrict ::1
+      restrict source notrap nomodify noquery
+  register: ntp_conf
+  when: not vagrant_cluster
+
+- name: restart ntpd
+  service:
+    name: ntp
+    state: restarted
+  when: not vagrant_cluster and ntp_conf is changed
+
+- name: install MUX-Producer
+  include_tasks:
+    file: openedx_ansible_lti_producer.yaml
+    apply:
+      tags:
+        - lti_producer
+  when: MUX_LTI_PRODUCER_ENABLED
+  tags: [ "lti_producer" ]

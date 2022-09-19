@@ -1,0 +1,14 @@
+#
+# forked from https://github.com/edx/configuration/blob/open-release/koa.3/playbooks/roles/edxapp/templates/edx/app/supervisor/conf.d.available/workers.conf.j2
+#
+[program:celerybeat]
+environment={% if COMMON_ENABLE_NEWRELIC_APP %}NEW_RELIC_APP_NAME=celerybeat,NEW_RELIC_LICENSE_KEY={{ NEWRELIC_LICENSE_KEY }},{% endif -%}LOGLEVEL=info,DJANGO_SETTINGS_MODULE=lms.envs.production,PYTHONPATH={{ COMMON_APP_DIR }}/edxapp/edx-platform,SERVICE_VARIANT=lms,LMS_CFG={{ COMMON_CFG_DIR }}/lms.yml,REVISION_CFG={{ COMMON_CFG_DIR }}/revisions.yml,BOTO_CONFIG="/edx/app/edxapp/.boto",EDX_REST_API_CLIENT_NAME="{{ CELERYBEAT_QUEUE_NAME }}"
+user={{ common_web_user }}
+directory={{ COMMON_APP_DIR }}/edxapp/edx-platform
+stdout_logfile={{ supervisor_log_dir }}/%(program_name)s-stdout.log
+stderr_logfile={{ supervisor_log_dir }}/%(program_name)s-stderr.log
+
+command={{ COMMON_APP_DIR + '/edxapp/venvs/edxapp/bin/newrelic-admin run-program ' if COMMON_ENABLE_NEWRELIC_APP else ''}}{{ COMMON_APP_DIR }}/edxapp/venvs/edxapp/bin/python3.8 {{ COMMON_APP_DIR }}/edxapp/venvs/edxapp/bin/celery worker --app=lms.celery:APP -B --scheduler django_celery_beat.schedulers:DatabaseScheduler --loglevel=info --hostname=edx.lms.core.high_mem.%%h --queues={{ CELERYBEAT_QUEUE_NAME }} --concurrency=1 --maxtasksperchild 1 -O default
+killasgroup=true
+stopwaitsecs=900
+autorestart=true

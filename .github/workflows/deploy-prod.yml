@@ -1,0 +1,112 @@
+---
+
+# third-party links:
+# https://github.com/marketplace/actions/terragrunt-installer
+
+name: PROD deploy
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-18.04
+    env:
+      ACTIONS_STEP_DEBUG: false
+      ENVIRONMENT: prod
+      AWS_DEFAULT_REGION: ${{ secrets.PROD_AWS_DEFAULT_REGION }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
+      EDXAPP_STAFF_PASSWORD: ${{ secrets.EDXAPP_STAFF_PASSWORD }}
+      ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+      PKR_VAR_source_ami_name: "openedx-prod-*"
+      PKR_VAR_source_ami_owner: "535615973801"
+      # PKR_VAR_source_ami_name: "ubuntu/images/*ubuntu-focal-20.04-amd64-server-*"
+      # PKR_VAR_source_ami_owner: "099720109477"
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: autero1/action-terragrunt@v1.1.0
+        with:
+          terragrunt_version: 0.28.24
+      - uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 0.14.11
+      - uses: hashicorp-contrib/setup-packer@v1
+        with:
+          packer-version: 1.7.2
+      - name: removing terraform wrapper
+        run: mv ${TERRAFORM_CLI_PATH}/terraform-bin ${TERRAFORM_CLI_PATH}/terraform || true
+      - name: terraform infra
+        run: |
+          export TF_VAR_mysql_password=${EDXAPP_STAFF_PASSWORD}
+          export TF_VAR_mongo_password=${EDXAPP_STAFF_PASSWORD}
+          cd ${GITHUB_WORKSPACE}/live/${ENVIRONMENT}/infra
+          terragrunt init
+          terragrunt plan -compact-warnings -detailed-exitcode
+          ret=$!
+          #if test 0${ret} -gt 0 ; then
+          #  echo "Terraform configuration was changed or AWS resources was configured manually."
+          #  echo "This task not designed to apply configuration changes automatically."
+          #  echo "Please run terragrunt for ${ENVIRONMENT} manually to review and apply changes or"
+          #  echo "update this workflow with `terragrunt apply -auto-approve -compact-warnings`."
+          #  exit 1
+          #fi
+          echo === Extracting EDXAPP variables from terraform output
+          # save terraform output to temporary file
+          ANSIBLE_TF_CONFIG_TMP="/tmp/config_tf.yml"
+          echo "AWS_S3_REGION_NAME: ${AWS_DEFAULT_REGION}" > ${ANSIBLE_TF_CONFIG_TMP}
+          echo "EDXAPP_STAFF_PASSWORD: ${EDXAPP_STAFF_PASSWORD}" >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "EDXAPP_AWS_STORAGE_BUCKET_NAME: "$(terragrunt output -raw openedx_s3_storage_bucket_name) >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "EDXAPP_AWS_ACCESS_KEY_ID: "$(terragrunt output -raw openedx_s3_storage_access_key) >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "EDXAPP_AWS_SECRET_ACCESS_KEY: "$(terragrunt output -raw openedx_s3_storage_access_secret) >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "AWS_S3_LOGS_ACCESS_KEY_ID: "$(terragrunt output -raw openedx_s3_tracking_logs_access_key) >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "AWS_S3_LOGS_SECRET_KEY: "$(terragrunt output -raw openedx_s3_tracking_logs_access_secret) >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "COMMON_OBJECT_STORE_LOG_SYNC_BUCKET: "$(terragrunt output -raw openedx_s3_tracking_logs_bucket_name) >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "ELASTICSEARCH_HOST: "$(terragrunt output -raw elasticsearch_endpoint) >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "MEMCACHE_ENDPOINT: "$(terragrunt output -raw memcached_endpoint) >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "EDXAPP_REDIS_HOSTNAME: "$(terragrunt output -raw redis_endpoint) >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "EDXAPP_MYSQL_HOST: "$(terragrunt output -raw rds_host_name | cut -f 1 -d :) >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "MYSQL_ADMIN_USER: "$(terragrunt output -raw rds_user) >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "MYSQL_ADMIN_PASSWORD: "$(terragrunt output -raw rds_password) >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "EDXAPP_MONGO_HOSTS: "$(terragrunt output -raw mongo_endpoint) >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "MONGO_ADMIN_USER: "$(terragrunt output -raw mongo_user) >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "MONGO_ADMIN_PASSWORD: "$(terragrunt output -raw mongo_password) >> ${ANSIBLE_TF_CONFIG_TMP}
+          echo "COMMON_STAFF_PASSWORD: "${EDXAPP_STAFF_PASSWORD} >> ${ANSIBLE_TF_CONFIG_TMP}
+          export TF_OUTPUT_openedx_app_sg_id=$(terragrunt output -raw openedx_app_sg_id)
+          export TF_OUTPUT_packer_sg_id=$(terragrunt output -raw packer_sg_id)
+          export TF_OUTPUT_packer_network_id=$(terragrunt output -raw packer_network_id)
+          echo ===
+          cat ${ANSIBLE_TF_CONFIG_TMP}
+          echo ===
+          # save variables for next step
+          echo ANSIBLE_TF_CONFIG="${ANSIBLE_TF_CONFIG_TMP}" >> ${GITHUB_ENV}
+          echo PKR_VAR_packer_security_group_id="${TF_OUTPUT_packer_sg_id}" >> ${GITHUB_ENV}
+          echo PKR_VAR_packer_network_id="${TF_OUTPUT_packer_network_id}" >> ${GITHUB_ENV}
+      - name: packer build
+        run: |
+          export ANSIBLE_TF_CONFIG=${{ env.ANSIBLE_TF_CONFIG }}
+          export PKR_VAR_packer_security_group_id=${{ env.PKR_VAR_packer_security_group_id }}
+          export PKR_VAR_packer_network_id=${{ env.PKR_VAR_packer_network_id }}
+          cd ${GITHUB_WORKSPACE}/build
+          echo ${ANSIBLE_VAULT_PASSWORD} > openedx_ansible.vaultpass
+          cat ${ANSIBLE_TF_CONFIG} > config_${ENVIRONMENT}_tf.yml
+          echo ===
+          cat config_${ENVIRONMENT}_tf.yml
+          echo ===
+          export PKR_VAR_environment=${ENVIRONMENT}
+          export PKR_VAR_region=${AWS_DEFAULT_REGION}
+          packer build openedx.pkr.hcl
+          echo ===
+          cat packer-manifest.json
+          echo ===
+          # save variables for next step
+          echo TF_VAR_app_instance_image_id=$(cat packer-manifest.json | grep ami | sed 's/^.*\(ami-.*\)".*$/\1/') >> ${GITHUB_ENV}
+      - name: terraform app
+        run: |
+          export TF_VAR_app_instance_image_id=${{ env.TF_VAR_app_instance_image_id }}
+          cd ${GITHUB_WORKSPACE}/live/${ENVIRONMENT}/app
+          terragrunt init
+          terragrunt apply -auto-approve -compact-warnings
+          aws logs put-retention-policy --log-group-name openedx-logs-${ENVIRONMENT} --retention-in-days 7 || true

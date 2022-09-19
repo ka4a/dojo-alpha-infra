@@ -1,0 +1,108 @@
+---
+
+- name: Add SSH public keys for default user
+  authorized_key:
+    user: "{{ ansible_user }}"
+    key: "{{ item }}"
+  with_items: "{{ SSH_PUB_KEYS | default([]) }}"
+
+- name: applying sysctl settings
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+  with_dict:
+    vm.swappiness: 1
+    net.core.rmem_max: 16777216
+    net.core.wmem_max: 16777216
+    net.ipv4.tcp_rmem: "4096 524288 16777216"
+    net.ipv4.tcp_wmem: "4096 524288 16777216"
+    net.core.netdev_max_backlog: 250000
+    net.ipv4.ip_local_port_range: "10240 65000"
+    net.ipv4.conf.all.send_redirects: 0
+    net.core.somaxconn: 4096
+  ignore_errors: true
+
+- name: Add nginx apt key
+  apt_key:
+    url: "http://nginx.org/keys/nginx_signing.key"
+    state: present
+  when: NGINX_ENABLE_S3_PROXY
+  tags: [ "nginx" ]
+
+- name: Add nginx repository
+  apt_repository:
+    repo: "deb http://nginx.org/packages/ubuntu/ {{ ansible_distribution_release }} nginx"
+    state: present
+  when: NGINX_ENABLE_S3_PROXY
+  tags: [ "nginx" ]
+
+- name: install nginx-module-njs
+  apt:
+    name: [ "nginx", "nginx-module-njs" ]
+    state: present
+    update_cache: yes
+  when: NGINX_ENABLE_S3_PROXY
+  tags: [ "nginx" ]
+
+- name: patch /edx/app/edx_ansible/edx_ansible/playbooks/roles/nginx/templates/etc/nginx/nginx.conf.j2 with NJS module
+  blockinfile:
+    path: /edx/app/edx_ansible/edx_ansible/playbooks/roles/nginx/templates/etc/nginx/nginx.conf.j2
+    block: |
+      # NJS module used for implementing S3 authentication
+      load_module modules/ngx_http_js_module.so;
+    insertbefore: "^events"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK"
+    state: present
+  when: NGINX_ENABLE_S3_PROXY
+  tags: [ "nginx" ]
+
+- name: uninstall credentials service
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - /edx/etc/credentials.yml
+    - /edx/app/credentials/
+    - /edx/app/supervisor/conf.available.d/credentials.conf
+    - /edx/app/supervisor/conf.d/credentials.conf
+    - /edx/var/credentials/
+    - /etc/nginx/sites-enabled/credentials
+    - /edx/app/nginx/sites-available/credentials
+
+- name: uninstall lti-producer service
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - /edx/etc/lti-producer.yml
+    - /edx/app/lti-producer/
+    - /edx/app/supervisor/conf.available.d/lti-producer.conf
+    - /edx/app/supervisor/conf.d/lti-producer.conf
+    - /edx/var/lti-producer/
+    - /etc/nginx/sites-enabled/lti-producer
+    - /edx/app/nginx/sites-available/lti-producer
+  when: not MUX_LTI_PRODUCER_ENABLED
+
+- name: uninstall deprecated, renamed and not used MFEs
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - /edx/app/admin-portal
+    - /etc/nginx/sites-enabled/admin-portal
+    - /edx/app/learner-portal-enterprise
+    - /etc/nginx/sites-enabled/learner-portal-enterprise
+    - /edx/app/dojo-instructor
+    - /etc/nginx/sites-enabled/dojo-instructor
+
+- name: uninstall cs_comments_service
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - /edx/app/forum
+    - /edx/app/supervisor/conf.available.d/forum.conf
+    - /edx/app/supervisor/conf.d/forum.conf
+    - /etc/nginx/sites-enabled/forum
+    - /edx/app/nginx/sites-available/forum
+  when: not FORUM_ENABLED

@@ -1,0 +1,7 @@
+---
+
+# Deployment variables from 'config_common.yml' can be overrided in this file for DEV environment
+
+EMPTY: '' # keep it here to omit ansible errors about empty extra-vars file
+
+COMMON_DEFAULT_FROM_EMAIL: 'dev-no-reply@dojoalpha.com'

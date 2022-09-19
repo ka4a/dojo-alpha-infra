@@ -1,0 +1,239 @@
+proxy_cache_path /tmp/nginx_cache levels=1:2 keys_zone=s3_cache:600m max_size=500m inactive=180m use_temp_path=off;
+
+server_names_hash_bucket_size 256;
+
+{% if NGINX_ENABLE_S3_PROXY %}
+map $request_uri $s3_uri_path {
+    "~^/{{ EDXAPP_AWS_STORAGE_BUCKET_NAME }}(?P<path>/.*?)(\?.*)*$"  $path;
+}
+
+js_import /etc/nginx/include/s3gateway.js;
+js_set $awsDate s3gateway.awsHeaderDate;
+js_set $s3auth s3gateway.s3auth;
+js_set $s3uri s3gateway.s3uri;
+{% endif %}
+
+server {
+    listen 80 default;
+    location '/.well-known/acme-challenge' {
+      allow all;
+      default_type "text/plain";
+      root /var/www/letsencrypt;
+    }
+    location = /nginx_basic_status {
+        if ($http_user_agent != "{{ NGINX_BASIC_STATUS_SECRET }}") {
+            rewrite ^ https://$http_host permanent;
+        }
+        stub_status;
+    }
+    location / {
+        if ($http_user_agent = "ELB-HealthChecker/2.0") {
+            return 200 "OK";
+        }
+        rewrite ^ {{ EDXAPP_LMS_ROOT_URL }};
+    }
+}
+
+server {
+    listen 80;
+    server_name {{ EDXAPP_LMS_BASE }};
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+    resolver                8.8.8.8;
+    client_max_body_size 4m;
+
+    location / {
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header X-Forwarded-Port $http_x_forwarded_port;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header Host $server_name;
+        proxy_redirect off;
+        proxy_pass http://127.0.0.1:18000;
+    }
+{% if NGINX_ENABLE_S3_PROXY %}
+    # https://reustle.atlassian.net/browse/DJ-162
+    location /{{ EDXAPP_AWS_STORAGE_BUCKET_NAME }}/ {
+
+        proxy_cache              s3_cache;
+        proxy_http_version       1.1;
+        proxy_hide_header        Set-Cookie;
+        proxy_ignore_headers     Set-Cookie;
+        proxy_intercept_errors   on;
+        proxy_cache_convert_head off;
+        proxy_cache_revalidate   on;
+        proxy_cache_use_stale    error timeout updating http_500 http_502 http_503 http_504;
+        proxy_cache_lock         on;
+        proxy_cache_valid        200 302 1h;
+        proxy_cache_valid        404 1m;
+        proxy_cache_valid        403 30s;
+        proxy_cache_methods      GET HEAD;
+        proxy_cache_key          "$request_method$host$uri";
+        proxy_set_header         x-amz-date $awsDate;
+        proxy_set_header         x-amz-content-sha256 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+        proxy_set_header         Authorization $s3auth;
+        proxy_set_header         Host 's3.{{ AWS_S3_REGION_NAME }}.amazonaws.com';
+        proxy_set_header         Connection '';
+        proxy_pass               http://s3.{{ AWS_S3_REGION_NAME }}.amazonaws.com$s3uri;
+        js_header_filter         s3gateway.editAmzHeaders;
+        add_header               X-Cache-Status $upstream_cache_status;
+    }
+    # https://woven-dojo.atlassian.net/browse/DAD-226
+    location @redirect_to_media {
+        rewrite ^ https://exp.dojoalpha.com/{{ EDXAPP_AWS_STORAGE_BUCKET_NAME }}/$media_file;
+    }
+    location ~ ^/media/(?P<media_file>.*) {
+        root {{ edxapp_media_dir }};
+        try_files /$media_file @redirect_to_media;
+        expires {{ EDXAPP_PROFILE_IMAGE_MAX_AGE }};
+    }
+{% endif %}
+{% if EDXAPP_YOUTUBE_API_KEY != "PUT_YOUR_API_KEY_HERE" %}
+    location /courses/yt_video_metadata {
+        return "200" '{ "items": [] }';
+        default_type "application/json";
+    }
+{% endif %}
+}
+
+server {
+    listen 80;
+    server_name {{ EDXAPP_PREVIEW_LMS_BASE }};
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+    resolver                8.8.8.8;
+    client_max_body_size 4m;
+    location / {
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header X-Forwarded-Port $http_x_forwarded_port;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header Host $server_name;
+        proxy_redirect off;
+        proxy_pass http://127.0.0.1:18000;
+    }
+}
+
+server {
+    listen 80;
+    server_name {{ EDXAPP_CMS_BASE }};
+    resolver                8.8.8.8;
+    client_max_body_size {{ EDXAPP_MAX_ASSET_UPLOAD_FILE_SIZE_IN_MB | default('100') }}m;
+    location / {
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header X-Forwarded-Port $http_x_forwarded_port;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header Host $server_name;
+        proxy_redirect off;
+        proxy_pass http://127.0.0.1:18010;
+    }
+}
+
+{% if ENTERPRISE_CATALOG_DOMAIN is defined and ENTERPRISE_CATALOG_DOMAIN != 'localhost' %}
+server {
+    listen 80;
+    server_name {{ ENTERPRISE_CATALOG_DOMAIN }};
+    resolver                8.8.8.8;
+
+{% if NGINX_ADMIN_ACCESS_CIDRS and EDXAPP_ENABLE_DJANGO_ADMIN_RESTRICTION %}
+    real_ip_header X-Forwarded-For;
+    set_real_ip_from {{ NGINX_TRUSTED_IP_CIDRS }};
+    real_ip_recursive on;
+    {% for cidr in NGINX_ADMIN_ACCESS_CIDRS %}
+    allow {{ cidr }};
+    {% endfor %}
+    deny all;
+{% endif %}
+
+    location / {
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header X-Forwarded-Port $http_x_forwarded_port;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header Host $server_name;
+        proxy_redirect off;
+        proxy_pass http://127.0.0.1:{{ ENTERPRISE_CATALOG_NGINX_PORT }};
+    }
+}
+{% endif %}
+
+{% if LICENSE_MANAGER_DOMAIN is defined and LICENSE_MANAGER_DOMAIN != 'localhost' %}
+server {
+    listen 80;
+    server_name {{ LICENSE_MANAGER_DOMAIN }};
+    resolver                8.8.8.8;
+
+{% if NGINX_ADMIN_ACCESS_CIDRS and EDXAPP_ENABLE_DJANGO_ADMIN_RESTRICTION %}
+    real_ip_header X-Forwarded-For;
+    set_real_ip_from {{ NGINX_TRUSTED_IP_CIDRS }};
+    real_ip_recursive on;
+    {% for cidr in NGINX_ADMIN_ACCESS_CIDRS %}
+    allow {{ cidr }};
+    {% endfor %}
+    deny all;
+{% endif %}
+
+    location / {
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header X-Forwarded-Port $http_x_forwarded_port;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header Host $server_name;
+        proxy_redirect off;
+        proxy_pass http://127.0.0.1:{{ LICENSE_MANAGER_NGINX_PORT }};
+    }
+}
+{% endif %}
+
+{% if PROGRAMS_ENABLED is defined and PROGRAMS_ENABLED %}
+server {
+    listen 80;
+    server_name {{ DISCOVERY_DOMAIN }};
+    resolver                8.8.8.8;
+
+{% if NGINX_ADMIN_ACCESS_CIDRS and EDXAPP_ENABLE_DJANGO_ADMIN_RESTRICTION %}
+    real_ip_header X-Forwarded-For;
+    set_real_ip_from {{ NGINX_TRUSTED_IP_CIDRS }};
+    real_ip_recursive on;
+    {% for cidr in NGINX_ADMIN_ACCESS_CIDRS %}
+    allow {{ cidr }};
+    {% endfor %}
+    deny all;
+{% endif %}
+
+    location / {
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header X-Forwarded-Port $http_x_forwarded_port;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header Host $server_name;
+        proxy_redirect off;
+        proxy_pass http://127.0.0.1:{{ DISCOVERY_NGINX_PORT }};
+    }
+}
+
+{% endif %}
+
+{% if MUX_LTI_PRODUCER_ENABLED is defined and MUX_LTI_PRODUCER_ENABLED %}
+server {
+    listen 80;
+    server_name {{ MUX_LTI_PRODUCER_DOMAIN }};
+    resolver                8.8.8.8;
+
+{% if NGINX_ADMIN_ACCESS_CIDRS and EDXAPP_ENABLE_DJANGO_ADMIN_RESTRICTION %}
+    real_ip_header X-Forwarded-For;
+    set_real_ip_from {{ NGINX_TRUSTED_IP_CIDRS }};
+    real_ip_recursive on;
+    {% for cidr in NGINX_ADMIN_ACCESS_CIDRS %}
+    allow {{ cidr }};
+    {% endfor %}
+    deny all;
+{% endif %}
+
+    client_max_body_size 1024m;
+    location / {
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header X-Forwarded-Port $http_x_forwarded_port;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header Host $server_name;
+        proxy_redirect off;
+        proxy_pass http://127.0.0.1:19630;
+    }
+}
+
+{% endif %}

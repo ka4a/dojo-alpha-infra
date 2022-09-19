@@ -1,0 +1,27 @@
+---
+vagrant_cluster: True
+migrate_db: "yes"
+EDX_PLATFORM_VERSION: "open-release/koa.3"
+
+SITE_NAME: "localhost"
+EDXAPP_LMS_BASE: "localhost:18000"
+EDXAPP_CMS_BASE: "localhost:18010"
+
+AWS_ACCESS_KEY_ID: !!null
+AWS_SECRET_ACCESS_KEY: !!null
+EDXAPP_AWS_STORAGE_BUCKET_NAME: "dojo-devstack-edxapp-storage"
+COMMON_OBJECT_STORE_LOG_SYNC_BUCKET: "dojo-devstack-edxapp-tracking-logs"
+AWS_S3_LOGS_ACCESS_KEY_ID: !!null
+AWS_S3_LOGS_SECRET_KEY: !!null
+
+ELASTICSEARCH_HOST: "127.0.0.1"
+EDXAPP_MYSQL_HOST: "127.0.0.1"
+EDXAPP_MEMCACHE: "['127.0.0.1:11211']"
+EDXAPP_REDIS_HOSTNAME: "127.0.0.1"
+EDXAPP_MONGO_HOSTS: "127.0.0.1"
+COMMON_CONFIG_NO_LOGGING: False
+EDXAPP_EDXAPP_SECRET_KEY: 'RANDOMIZEme'
+
+mysql_server_5_7_pkg: "mysql-server=5.7.34-1ubuntu18.04"
+mysql_client_5_7_pkg: "mysql-client=5.7.34-1ubuntu18.04"
+mysql_community_server_5_7_pkg: "mysql-server=5.7.34-1ubuntu18.04"

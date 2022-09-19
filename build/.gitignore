@@ -1,0 +1,3 @@
+config.yml
+*.vaultpass
+packer-manifest.json
